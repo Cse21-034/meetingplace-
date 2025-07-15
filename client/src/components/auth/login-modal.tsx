@@ -13,8 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { FcGoogle } from "react-icons/fc";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ExternalLink, AlertTriangle } from "lucide-react";
 import { signInWithGooglePopup, signInWithGoogleRedirect } from "@/lib/firebase";
 
 interface LoginModalProps {
@@ -146,17 +144,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           </p>
         </div>
 
-        {/* Firebase Setup Instructions */}
-        <Alert className="mt-4">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            <strong>Getting "unauthorized domain" error?</strong><br/>
-            1. Go to <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-600 underline">Firebase Console</a><br/>
-            2. Authentication → Sign-in method → Authorized domains<br/>
-            3. Add: <code className="bg-gray-100 px-1 rounded">{window.location.hostname}</code><br/>
-            4. Make sure Firebase secrets are set in Replit
-          </AlertDescription>
-        </Alert>
+
       </DialogContent>
     </Dialog>
   );
