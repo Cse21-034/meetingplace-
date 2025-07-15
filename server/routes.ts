@@ -2,14 +2,13 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+// Removed Replit Auth - using Firebase only
 import { setupFirebaseAuth, verifyFirebaseToken } from "./firebaseAuth";
 import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup authentication systems
-  await setupAuth(app);
+  // Setup Firebase authentication only
   setupFirebaseAuth(app);
   
   // Seed database with sample data in development
@@ -61,9 +60,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/posts', isAuthenticated, async (req: any, res) => {
+  app.post('/api/posts', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       const validation = insertPostSchema.safeParse({ ...req.body, authorId: userId });
       
       if (!validation.success) {
@@ -81,10 +86,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/posts/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/posts/:id', verifyFirebaseToken, async (req: any, res) => {
     try {
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      const userId = req.firebaseUser.uid;
       
       const existingPost = await storage.getPostById(id);
       if (!existingPost) {
@@ -103,10 +111,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/posts/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/posts/:id', verifyFirebaseToken, async (req: any, res) => {
     try {
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
       const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       
       const existingPost = await storage.getPostById(id);
       if (!existingPost) {
@@ -137,10 +151,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/posts/:id/comments', isAuthenticated, async (req: any, res) => {
+  app.post('/api/posts/:id/comments', verifyFirebaseToken, async (req: any, res) => {
     try {
       const postId = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       
       const validation = insertCommentSchema.safeParse({ 
         ...req.body, 
@@ -164,9 +181,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vote routes
-  app.post('/api/votes', isAuthenticated, async (req: any, res) => {
+  app.post('/api/votes', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       const { postId, commentId, type } = req.body;
 
       // Check if vote already exists
@@ -207,9 +227,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bookmark routes
-  app.get('/api/bookmarks', isAuthenticated, async (req: any, res) => {
+  app.get('/api/bookmarks', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       const bookmarks = await storage.getBookmarks(userId);
       res.json(bookmarks);
     } catch (error) {
@@ -218,9 +241,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/bookmarks', isAuthenticated, async (req: any, res) => {
+  app.post('/api/bookmarks', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       const { postId } = req.body;
 
       const bookmark = await storage.createBookmark({ userId, postId });
@@ -231,9 +257,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/bookmarks/:postId', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/bookmarks/:postId', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       const postId = parseInt(req.params.postId);
 
       await storage.deleteBookmark(userId, postId);
@@ -245,9 +274,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Notification routes
-  app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+  app.get('/api/notifications', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
       const notifications = await storage.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -256,7 +288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+  app.put('/api/notifications/:id/read', verifyFirebaseToken, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.markNotificationAsRead(id);
@@ -278,10 +310,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/groups/:id/join', isAuthenticated, async (req: any, res) => {
+  app.post('/api/groups/:id/join', verifyFirebaseToken, async (req: any, res) => {
     try {
       const groupId = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
 
       await storage.joinGroup(groupId, userId);
       res.json({ message: "Successfully joined group" });
@@ -291,10 +326,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/groups/:id/leave', isAuthenticated, async (req: any, res) => {
+  app.post('/api/groups/:id/leave', verifyFirebaseToken, async (req: any, res) => {
     try {
       const groupId = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
 
       await storage.leaveGroup(groupId, userId);
       res.json({ message: "Successfully left group" });
@@ -377,9 +415,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Subscription routes
-  app.get('/api/subscriptions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/subscriptions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const subscriptions = await storage.getSubscriptions(userId);
       res.json(subscriptions);
     } catch (error) {
@@ -388,9 +426,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/subscriptions', isAuthenticated, async (req: any, res) => {
+  app.post('/api/subscriptions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const subscription = await storage.createSubscription({
         ...req.body,
         userId
@@ -403,9 +441,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tips routes
-  app.get('/api/tips', isAuthenticated, async (req: any, res) => {
+  app.get('/api/tips', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const tips = await storage.getTips(userId);
       res.json(tips);
     } catch (error) {
@@ -414,9 +452,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/tips', isAuthenticated, async (req: any, res) => {
+  app.post('/api/tips', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const tip = await storage.createTip({
         ...req.body,
         fromUserId: userId
@@ -441,9 +479,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/marketplace', isAuthenticated, async (req: any, res) => {
+  app.post('/api/marketplace', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const item = await storage.createMarketplaceItem({
         ...req.body,
         sellerId: userId
@@ -456,9 +494,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transactions routes
-  app.get('/api/transactions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const limit = parseInt(req.query.limit as string) || 50;
       const transactions = await storage.getTransactions(userId, limit);
       res.json(transactions);
@@ -468,9 +506,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/transactions', isAuthenticated, async (req: any, res) => {
+  app.post('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const transaction = await storage.createTransaction({
         ...req.body,
         userId
@@ -483,9 +521,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tips routes
-  app.get('/api/tips', isAuthenticated, async (req: any, res) => {
+  app.get('/api/tips', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const tips = await storage.getTips(userId);
       res.json(tips);
     } catch (error) {
@@ -494,9 +532,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/tips', isAuthenticated, async (req: any, res) => {
+  app.post('/api/tips', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const { toUserId, postId, commentId, amount, currency, paymentMethod, message } = req.body;
 
       // Validate required fields
@@ -561,9 +599,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Subscriptions routes
-  app.get('/api/subscriptions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/subscriptions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const subscriptions = await storage.getSubscriptions(userId);
       res.json(subscriptions);
     } catch (error) {
@@ -572,9 +610,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/subscriptions', isAuthenticated, async (req: any, res) => {
+  app.post('/api/subscriptions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const { plan, currency, amount, paymentMethod, billing } = req.body;
 
       // Validate required fields
@@ -627,9 +665,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/subscriptions/:id/cancel', isAuthenticated, async (req: any, res) => {
+  app.put('/api/subscriptions/:id/cancel', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const subscriptionId = parseInt(req.params.id);
       
       const subscription = await storage.updateSubscription(subscriptionId, {
@@ -645,9 +683,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Wisdom points routes
-  app.get('/api/wisdom-transactions', isAuthenticated, async (req: any, res) => {
+  app.get('/api/wisdom-transactions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const transactions = await storage.getWisdomTransactions(userId);
       res.json(transactions);
     } catch (error) {
@@ -656,9 +694,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/wisdom-transactions', isAuthenticated, async (req: any, res) => {
+  app.post('/api/wisdom-transactions', verifyFirebaseToken, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = req.firebaseUser?.uid;
       const transaction = await storage.createWisdomTransaction({
         ...req.body,
         userId

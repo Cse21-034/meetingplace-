@@ -3,6 +3,7 @@
  * 
  * This is the entry point for the full-stack application that serves both
  * the API backend and the React frontend. It handles:
+ * - Firebase authentication integration
  * - API route registration and middleware setup
  * - Request/response logging for debugging
  * - Error handling and status codes

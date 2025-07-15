@@ -20,6 +20,11 @@ export default function Home() {
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [language, setLanguage] = useState<'en' | 'tn'>('en');
 
+  // Show landing page if not authenticated
+  if (!loading && !user) {
+    return <div>Please sign in to continue</div>;
+  }
+
   const { data: posts, isLoading: postsLoading, error } = useQuery({
     queryKey: ["/api/posts"],
     enabled: !!user,
