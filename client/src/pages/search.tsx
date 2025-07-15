@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MobileLayout from "@/components/mobile-layout";
 import PostCard from "@/components/post-card";
@@ -12,7 +12,7 @@ export default function Search() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
   // Debounce search query
-  React.useEffect(() => {
+  useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
     }, 500);

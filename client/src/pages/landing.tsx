@@ -1,11 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageSquare, Users, Heart, Globe } from "lucide-react";
+import LoginModal from "@/components/auth/login-modal";
 
 export default function Landing() {
-  const handleLogin = () => {
-    window.location.href = "/api/login";
-  };
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
@@ -81,7 +81,7 @@ export default function Landing() {
           {/* CTA */}
           <div className="space-y-4">
             <Button 
-              onClick={handleLogin}
+              onClick={() => setShowLoginModal(true)}
               className="w-full h-12 text-lg font-medium bg-primary hover:bg-blue-600"
             >
               Join Kgotla Today
@@ -96,6 +96,11 @@ export default function Landing() {
         <footer className="px-4 py-6 text-center text-xs text-gray-500 border-t">
           <p>© 2025 Kgotla. Made with ❤️ for Southern Africa</p>
         </footer>
+
+        <LoginModal 
+          isOpen={showLoginModal} 
+          onClose={() => setShowLoginModal(false)} 
+        />
       </div>
     </div>
   );

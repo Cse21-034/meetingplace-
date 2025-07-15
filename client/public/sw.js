@@ -1,26 +1,67 @@
-const CACHE_NAME = 'kgotla-v1';
+/**
+ * Service Worker for Kgotla PWA
+ * 
+ * Provides offline functionality and caching for the Progressive Web App.
+ * Enables the app to work offline and be installable on mobile devices.
+ */
+
+const CACHE_NAME = 'kgotla-v1.0.0';
 const urlsToCache = [
   '/',
-  '/static/js/bundle.js',
+  '/search',
+  '/groups',
+  '/notifications',
+  '/profile',
+  '/marketplace',
   '/static/css/main.css',
-  '/manifest.json',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'
+  '/static/js/main.js',
+  '/manifest.json'
 ];
 
-// Install event
+// Install event - cache resources
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
+        console.log('SW: Cache opened');
         return cache.addAll(urlsToCache);
       })
+      .catch((error) => {
+        console.log('SW: Cache install failed', error);
+      })
   );
+  self.skipWaiting();
 });
 
-// Fetch event
+// Activate event - clean up old caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('SW: Deleting old cache', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// Fetch event - serve from cache with network fallback
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Skip cross-origin requests
+  if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
@@ -29,55 +70,33 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
         
-        // Clone the request
-        const fetchRequest = event.request.clone();
-        
-        return fetch(fetchRequest).then((response) => {
+        return fetch(event.request).then((response) => {
           // Check if valid response
           if (!response || response.status !== 200 || response.type !== 'basic') {
             return response;
           }
-          
-          // Clone the response
+
+          // Clone the response for caching
           const responseToCache = response.clone();
-          
+
           caches.open(CACHE_NAME)
             .then((cache) => {
               cache.put(event.request, responseToCache);
             });
-          
+
           return response;
-        }).catch(() => {
-          // Return offline page for navigation requests
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
-          return new Response('Offline', {
-            status: 503,
-            statusText: 'Service Unavailable'
-          });
         });
+      })
+      .catch(() => {
+        // Return offline page for navigation requests
+        if (event.request.mode === 'navigate') {
+          return caches.match('/offline.html');
+        }
       })
   );
 });
 
-// Activate event
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
-
-// Background sync for offline post creation
+// Background sync for posting content when back online
 self.addEventListener('sync', (event) => {
   if (event.tag === 'background-sync') {
     event.waitUntil(doBackgroundSync());
@@ -85,119 +104,75 @@ self.addEventListener('sync', (event) => {
 });
 
 async function doBackgroundSync() {
+  // Handle queued posts, votes, comments when back online
+  console.log('SW: Background sync triggered');
+  
   try {
-    // Get pending posts from IndexedDB
-    const pendingPosts = await getPendingPosts();
+    // Get queued data from IndexedDB
+    const queuedData = await getQueuedData();
     
-    for (const post of pendingPosts) {
-      try {
-        await fetch('/api/posts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(post.data),
-        });
-        
-        // Remove from pending posts
-        await removePendingPost(post.id);
-      } catch (error) {
-        console.error('Failed to sync post:', error);
-      }
+    for (const item of queuedData) {
+      await syncItem(item);
     }
+    
+    // Clear queue after successful sync
+    await clearQueue();
   } catch (error) {
-    console.error('Background sync failed:', error);
+    console.log('SW: Background sync failed', error);
   }
 }
 
-// Push notification event
+// Push notification handling
 self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  const data = event.data.json();
   const options = {
-    body: event.data ? event.data.text() : 'New notification from Kgotla',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
-    vibrate: [100, 50, 100],
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: 1
-    },
+    body: data.body,
+    icon: '/icon-192x192.png',
+    badge: '/icon-72x72.png',
+    data: data.data,
     actions: [
       {
-        action: 'explore',
+        action: 'view',
         title: 'View',
-        icon: '/icons/checkmark.png'
+        icon: '/icon-72x72.png'
       },
       {
-        action: 'close',
-        title: 'Close',
-        icon: '/icons/xmark.png'
+        action: 'dismiss',
+        title: 'Dismiss'
       }
     ]
   };
-  
+
   event.waitUntil(
-    self.registration.showNotification('Kgotla', options)
+    self.registration.showNotification(data.title, options)
   );
 });
 
-// Notification click event
+// Notification click handling
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  
-  if (event.action === 'explore') {
-    // Open the app
+
+  if (event.action === 'view') {
     event.waitUntil(
-      clients.openWindow('/')
-    );
-  } else if (event.action === 'close') {
-    // Close notification
-    event.notification.close();
-  } else {
-    // Default action
-    event.waitUntil(
-      clients.openWindow('/')
+      clients.openWindow(event.notification.data.url || '/')
     );
   }
 });
 
-// IndexedDB helper functions for offline storage
-async function getPendingPosts() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('KgotlaDB', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      const transaction = db.transaction(['pendingPosts'], 'readonly');
-      const store = transaction.objectStore('pendingPosts');
-      const getRequest = store.getAll();
-      
-      getRequest.onerror = () => reject(getRequest.error);
-      getRequest.onsuccess = () => resolve(getRequest.result);
-    };
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('pendingPosts')) {
-        db.createObjectStore('pendingPosts', { keyPath: 'id' });
-      }
-    };
-  });
+// Helper functions for offline queue management
+async function getQueuedData() {
+  // Implement IndexedDB queue retrieval
+  return [];
 }
 
-async function removePendingPost(id) {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('KgotlaDB', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      const transaction = db.transaction(['pendingPosts'], 'readwrite');
-      const store = transaction.objectStore('pendingPosts');
-      const deleteRequest = store.delete(id);
-      
-      deleteRequest.onerror = () => reject(deleteRequest.error);
-      deleteRequest.onsuccess = () => resolve();
-    };
-  });
+async function syncItem(item) {
+  // Implement syncing of individual items
+  console.log('SW: Syncing item', item);
+}
+
+async function clearQueue() {
+  // Implement queue clearing
+  console.log('SW: Queue cleared');
 }

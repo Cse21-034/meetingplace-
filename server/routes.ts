@@ -3,22 +3,34 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupFirebaseAuth, verifyFirebaseToken } from "./firebaseAuth";
 import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
+  // Setup authentication systems
   await setupAuth(app);
+  setupFirebaseAuth(app);
+  
+  // Seed database with sample data in development
+  if (process.env.NODE_ENV === 'development') {
+    const { seedDatabase } = await import('./seedData');
+    await seedDatabase();
+  }
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Search endpoint
+  app.get('/api/search', async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      const query = req.query.q as string;
+      if (!query || query.trim().length === 0) {
+        return res.json([]);
+      }
+      
+      const results = await storage.searchPosts(query.trim());
+      res.json(results);
     } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      console.error("Search error:", error);
+      res.status(500).json({ message: "Search failed" });
     }
   });
 

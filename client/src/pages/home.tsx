@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import MobileLayout from "@/components/mobile-layout";
@@ -10,33 +10,19 @@ import TipModal from "@/components/tip-modal";
 import SubscriptionModal from "@/components/subscription-modal";
 import { Button } from "@/components/ui/button";
 import { Plus, Search, Bell, Globe, Crown, DollarSign, Star } from "lucide-react";
+import AppMenu from "@/components/app-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export default function Home() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [language, setLanguage] = useState<'en' | 'tn'>('en');
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
-    }
-  }, [isAuthenticated, isLoading, toast]);
-
   const { data: posts, isLoading: postsLoading, error } = useQuery({
     queryKey: ["/api/posts"],
-    enabled: isAuthenticated,
+    enabled: !!user,
     retry: false,
   });
 
@@ -59,9 +45,7 @@ export default function Home() {
   const header = (
     <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-          <i className="fas fa-comments text-white text-sm"></i>
-        </div>
+        <AppMenu />
         <h1 className="text-xl font-bold text-neutral">
           {language === 'en' ? 'Kgotla' : 'Kgotla'}
         </h1>
