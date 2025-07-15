@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { FcGoogle } from "react-icons/fc";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ExternalLink, AlertTriangle } from "lucide-react";
 import { signInWithGooglePopup, signInWithGoogleRedirect } from "@/lib/firebase";
 
 interface LoginModalProps {
@@ -42,9 +44,18 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         }
       }
     } catch (error: any) {
+      console.error('Google sign-in error:', error);
+      let errorMessage = "Failed to sign in with Google";
+      
+      if (error.code === 'auth/unauthorized-domain') {
+        errorMessage = "Domain not authorized. Please check the Firebase setup instructions below.";
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = "Popup was blocked. Try again or use redirect sign-in.";
+      }
+      
       toast({
         title: "Sign-in failed",
-        description: error.message || "Failed to sign in with Google",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -134,6 +145,18 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
             By continuing, you agree to our Terms of Service and Privacy Policy
           </p>
         </div>
+
+        {/* Firebase Setup Instructions */}
+        <Alert className="mt-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            <strong>Getting "unauthorized domain" error?</strong><br/>
+            1. Go to <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-600 underline">Firebase Console</a><br/>
+            2. Authentication → Sign-in method → Authorized domains<br/>
+            3. Add: <code className="bg-gray-100 px-1 rounded">{window.location.hostname}</code><br/>
+            4. Make sure Firebase secrets are set in Replit
+          </AlertDescription>
+        </Alert>
       </DialogContent>
     </Dialog>
   );

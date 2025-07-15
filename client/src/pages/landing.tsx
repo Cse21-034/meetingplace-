@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageSquare, Users, Heart, Globe } from "lucide-react";
 import LoginModal from "@/components/auth/login-modal";
+import QuickFirebaseFix from "@/components/quick-firebase-fix";
 
 export default function Landing() {
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -101,6 +102,11 @@ export default function Landing() {
           isOpen={showLoginModal} 
           onClose={() => setShowLoginModal(false)} 
         />
+
+        {/* Firebase Setup Help */}
+        <div className="px-4 pb-4">
+          <QuickFirebaseFix />
+        </div>
       </div>
     </div>
   );
