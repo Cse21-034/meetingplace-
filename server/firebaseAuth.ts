@@ -1,63 +1,79 @@
 // cse21-034/meetingplace-/meetingplace--a19add74c19c86b1799e84b4cd1980c120a5392d/server/firebaseAuth.ts
 
 import type { Express, Request, Response, NextFunction } from "express";
-import * as admin from 'firebase-admin'; // Reverted to static import (RECOMMENDED FIX)
+import * as admin from 'firebase-admin'; 
 import { storage } from "./storage";
+import fs from 'fs'; // <-- Added for file system access
+import path from 'path'; // <-- Added for file path resolution
+
+// Define the expected path for the secret file (Render Secret File)
+// Render mounts the file to this path by default.
+const SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/firebase-admin-key.json'; 
 
 // Initialize Firebase Admin SDK
 let firebaseAdmin: admin.app.App | null = null;
 const isProduction = process.env.NODE_ENV === 'production';
 
 try {
-  // Check if we have Firebase Admin credentials
-  if (process.env.FIREBASE_PROJECT_ID && 
-      process.env.FIREBASE_PRIVATE_KEY && 
-      process.env.FIREBASE_CLIENT_EMAIL) {
-    
-    // Clean the private key
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    
-    // 1. Trim whitespace and remove surrounding quotes/apostrophes
-    privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
-    
-    // 2. Replace escaped newline characters (\n) with actual newlines
-    privateKey = privateKey.replace(/\\n/g, '\n');
-    
-    console.log('Firebase Admin: Attempting to initialize with sanitized credentials...');
-    
-    // Log details only if not in production for security, but we need the feedback now
-    if (!isProduction) {
-        console.log('Project ID:', process.env.FIREBASE_PROJECT_ID);
-        console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
-        console.log('Private Key length:', privateKey.length);
-        console.log('Private Key starts with:', privateKey.substring(0, 50));
+  let serviceAccount: any = null;
+  
+  // ATTEMPT 1 (Render Secret File): Load entire service account object from file
+  try {
+    const fileContent = fs.readFileSync(SERVICE_ACCOUNT_FILE_PATH, 'utf8');
+    serviceAccount = JSON.parse(fileContent);
+
+    // Ensure core fields are present after reading the file
+    if (!serviceAccount.project_id || !serviceAccount.client_email || !serviceAccount.private_key) {
+        throw new Error('Secret file read successfully but is missing required fields.');
     }
+    console.log(`Firebase Admin: Read credentials from Secret File: ${SERVICE_ACCOUNT_FILE_PATH}`);
+
+  } catch (fileError) {
+    // ATTEMPT 2 (Standard ENV Variables - fallback): Use existing environment variables
+    console.log('Firebase Admin: Secret File not found or failed to load. Falling back to ENV variables...');
     
-    // Initialize synchronously on module load. This relies on the static import.
+    if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+        
+        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+        // Clean and process private key from ENV (retaining robust parsing logic)
+        privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
+        privateKey = privateKey.replace(/\\n/g, '\n');
+        
+        serviceAccount = {
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            privateKey: privateKey,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        };
+        
+    } else {
+        console.log('Required Firebase Admin ENV variables are missing.');
+        throw new Error('No Firebase Admin credentials found in any supported format.');
+    }
+  }
+
+  // Final check and initialization using the obtained serviceAccount object
+  if (serviceAccount) {
+    console.log('Firebase Admin: Attempting to initialize with credentials...');
+
     if (admin.apps.length === 0) {
+      // The crucial step is using admin.credential.cert(serviceAccount)
       firebaseAdmin = admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          privateKey: privateKey, // Use the cleaned privateKey
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        })
+        credential: admin.credential.cert(serviceAccount),
       });
       console.log('Firebase Admin SDK initialized successfully');
     } else {
-      // Re-use existing app instance
       firebaseAdmin = admin.app();
       console.log('Firebase Admin SDK already initialized');
     }
 
   } else {
-    console.log('Firebase Admin credentials not found, using REST API fallback');
+    console.log('Firebase Admin credentials not found, aborting Admin SDK initialization.');
   }
+  
 } catch (error) {
-  // If the error persists here, it means the private key content is invalid.
-  console.error('Firebase Admin initialization error:', error);
+  console.error('Firebase Admin fatal initialization error (non-recoverable by self-healing code):', error);
   console.log('Falling back to REST API verification');
 }
-
 
 /**
  * Middleware to verify Firebase ID tokens
@@ -74,7 +90,6 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     // Try to verify with Firebase Admin SDK first
     if (firebaseAdmin) {
       try {
-        // Use the synchronous firebaseAdmin reference
         const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
         
         // Attach user info to request
