@@ -20,6 +20,7 @@ import { setupVite, serveStatic, log } from "./vite";
 const app = express();
 
 // CORS Configuration for production deployment
+const isDevelopment = process.env.NODE_ENV === 'development';
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
   : ['http://localhost:5173', 'http://localhost:5000'];
@@ -29,9 +30,16 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // In development, allow all origins
+    if (isDevelopment) {
+      return callback(null, true);
+    }
+    
+    // In production, check against allowed origins
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
+      console.log(`CORS blocked origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
