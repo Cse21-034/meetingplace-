@@ -1,13 +1,13 @@
 /**
- * Authentication Hook
+ * Authentication Hook - FIXED VERSION
  * 
- * Provides authentication state and methods throughout the app.
- * Integrates Firebase auth with the backend API.
+ * Properly syncs Firebase users with PostgreSQL database
+ * Handles authentication state and errors gracefully
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User } from "firebase/auth";
-import { onAuthStateChange, signOutUser, handleGoogleRedirectResult } from "@/lib/firebase";
+import { onAuthStateChange, signOutUser } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
 interface AuthContextType {
@@ -24,23 +24,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Handle redirect result on app load
-    handleGoogleRedirectResult().catch((error) => {
-      console.error("Redirect result error:", error);
-    });
-
     // Listen for auth state changes
     const unsubscribe = onAuthStateChange(async (firebaseUser) => {
       if (firebaseUser) {
-        // Sync user with backend
         try {
-          const token = await firebaseUser.getIdToken();
-          const response = await fetch('/api/auth/firebase', {
-            method: 'POST',
+          // Get fresh token
+          const token = await firebaseUser.getIdToken(true);
+          
+          // Sync user with backend using POST method
+          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/firebase`, {
+            method: 'POST', // IMPORTANT: Must be POST
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
             },
+            credentials: 'include',
             body: JSON.stringify({
               uid: firebaseUser.uid,
               email: firebaseUser.email,
@@ -51,17 +49,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (response.ok) {
             setUser(firebaseUser);
+            
+            // Only show welcome toast for new logins (not on page refresh)
+            if (!sessionStorage.getItem('hasShownWelcome')) {
+              toast({
+                title: "Welcome back!",
+                description: `Signed in as ${firebaseUser.displayName || firebaseUser.email}`,
+              });
+              sessionStorage.setItem('hasShownWelcome', 'true');
+            }
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            console.error("Backend sync failed:", errorData);
+            
+            // Still set user even if backend sync fails
+            setUser(firebaseUser);
+            
             toast({
-              title: "Welcome back!",
-              description: `Signed in as ${firebaseUser.displayName || firebaseUser.email}`,
+              title: "Partial Login",
+              description: "You're logged in, but profile sync had issues. Some features may be limited.",
+              variant: "destructive",
             });
           }
         } catch (error) {
           console.error("Backend sync error:", error);
-          setUser(firebaseUser); // Still set user even if backend sync fails
+          // Still set user even if backend sync fails
+          setUser(firebaseUser);
         }
       } else {
         setUser(null);
+        sessionStorage.removeItem('hasShownWelcome');
       }
       setLoading(false);
     });
@@ -73,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await signOutUser();
       setUser(null);
+      sessionStorage.removeItem('hasShownWelcome');
       toast({
         title: "Signed out",
         description: "See you next time!",
