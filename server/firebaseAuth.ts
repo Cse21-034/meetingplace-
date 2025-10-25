@@ -6,47 +6,70 @@
  */
 
 import type { Express, Request, Response, NextFunction } from "express";
-import * as admin from 'firebase-admin';
 import { storage } from "./storage";
 
-// Initialize Firebase Admin SDK
-// In production, this uses environment variables from Render
-// In development, it falls back to REST API verification
-let firebaseAdmin: admin.app.App | null = null;
+// Initialize Firebase Admin SDK with better error handling
+let firebaseAdmin: any = null;
 
-try {
-  // Check if we have Firebase Admin credentials
-  if (process.env.FIREBASE_PROJECT_ID && 
-      process.env.FIREBASE_PRIVATE_KEY && 
-      process.env.FIREBASE_CLIENT_EMAIL) {
+async function initializeFirebaseAdmin() {
+  try {
+    // Dynamically import firebase-admin only when needed
+    const admin = await import('firebase-admin');
     
-    // START OF FIX: Robust Private Key Handling
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-    // 1. Trim whitespace and remove surrounding quotes if accidentally included
-    privateKey = privateKey.trim().replace(/^"|"$/g, '');
-
-    // 2. Replace escaped newline characters (\n) with actual newlines
-    privateKey = privateKey.replace(/\\n/g, '\n');
-    
-    console.log('Firebase Admin: Attempting to initialize with sanitized credentials...');
-    // END OF FIX
-
-    firebaseAdmin = admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        privateKey: privateKey, // Use the cleaned privateKey
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      })
-    });
-    console.log('Firebase Admin SDK initialized successfully');
-  } else {
-    console.log('Firebase Admin credentials not found, using REST API fallback');
+    // Check if we have Firebase Admin credentials
+    if (process.env.FIREBASE_PROJECT_ID && 
+        process.env.FIREBASE_PRIVATE_KEY && 
+        process.env.FIREBASE_CLIENT_EMAIL) {
+      
+      // Clean the private key
+      let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+      
+      // 1. Trim whitespace and remove surrounding quotes if accidentally included
+      privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
+      
+      // 2. Replace escaped newline characters (\n) with actual newlines
+      privateKey = privateKey.replace(/\\n/g, '\n');
+      
+      console.log('Firebase Admin: Attempting to initialize with sanitized credentials...');
+      console.log('Project ID:', process.env.FIREBASE_PROJECT_ID);
+      console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+      console.log('Private Key length:', privateKey.length);
+      console.log('Private Key starts with:', privateKey.substring(0, 50));
+      
+      // Check if already initialized
+      if (admin.apps.length === 0) {
+        firebaseAdmin = admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            privateKey: privateKey,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          })
+        });
+        console.log('Firebase Admin SDK initialized successfully');
+      } else {
+        firebaseAdmin = admin.app();
+        console.log('Firebase Admin SDK already initialized');
+      }
+      
+      return admin;
+    } else {
+      console.log('Firebase Admin credentials not found, using REST API fallback');
+      console.log('Missing:', {
+        projectId: !process.env.FIREBASE_PROJECT_ID,
+        privateKey: !process.env.FIREBASE_PRIVATE_KEY,
+        clientEmail: !process.env.FIREBASE_CLIENT_EMAIL
+      });
+      return null;
+    }
+  } catch (error) {
+    console.error('Firebase Admin initialization error:', error);
+    console.log('Falling back to REST API verification');
+    return null;
   }
-} catch (error) {
-  console.error('Firebase Admin initialization error:', error);
-  console.log('Falling back to REST API verification');
 }
+
+// Initialize on module load
+const adminPromise = initializeFirebaseAdmin();
 
 /**
  * Middleware to verify Firebase ID tokens
@@ -61,7 +84,8 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     const token = authHeader.split('Bearer ')[1];
     
     // Try to verify with Firebase Admin SDK first
-    if (firebaseAdmin) {
+    const admin = await adminPromise;
+    if (admin && firebaseAdmin) {
       try {
         const decodedToken = await admin.auth().verifyIdToken(token);
         
@@ -80,9 +104,10 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
       }
     }
     
-    // Fallback to REST API verification (for development)
-    const apiKey = process.env.VITE_FIREBASE_API_KEY;
+    // Fallback to REST API verification
+    const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
     if (!apiKey) {
+      console.error('No Firebase API key found in environment');
       return res.status(401).json({ message: 'Unauthorized: Firebase API key not configured' });
     }
     
@@ -93,11 +118,13 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     });
 
     if (!response.ok) {
+      const errorData = await response.text();
+      console.error('Firebase REST API error:', errorData);
       return res.status(401).json({ message: 'Unauthorized: Invalid token' });
     }
 
     const data = await response.json();
-    const user = data.users[0];
+    const user = data.users?.[0];
 
     if (!user) {
       return res.status(401).json({ message: 'Unauthorized: User not found' });
