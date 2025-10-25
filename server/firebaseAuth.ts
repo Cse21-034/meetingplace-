@@ -20,10 +20,22 @@ try {
       process.env.FIREBASE_PRIVATE_KEY && 
       process.env.FIREBASE_CLIENT_EMAIL) {
     
+    // START OF FIX: Robust Private Key Handling
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    // 1. Trim whitespace and remove surrounding quotes if accidentally included
+    privateKey = privateKey.trim().replace(/^"|"$/g, '');
+
+    // 2. Replace escaped newline characters (\n) with actual newlines
+    privateKey = privateKey.replace(/\\n/g, '\n');
+    
+    console.log('Firebase Admin: Attempting to initialize with sanitized credentials...');
+    // END OF FIX
+
     firebaseAdmin = admin.initializeApp({
       credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        privateKey: privateKey, // Use the cleaned privateKey
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       })
     });
