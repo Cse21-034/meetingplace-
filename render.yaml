@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: kgotla-backend
+    runtime: node
+    region: oregon
+    plan: starter
+    branch: main
+    buildCommand: bash build-backend.sh
+    startCommand: bash start-backend.sh
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+    autoDeploy: true
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+
+databases:
+  - name: kgotla-db
+    databaseName: kgotla
+    plan: starter

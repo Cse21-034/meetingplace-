@@ -8,6 +8,16 @@ import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmark
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint for monitoring and deployment platforms
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ 
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  });
+
   // Setup Firebase authentication only
   setupFirebaseAuth(app);
   

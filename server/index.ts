@@ -12,11 +12,31 @@
  */
 
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 // Initialize Express application
 const app = express();
+
+// CORS Configuration for production deployment
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : ['http://localhost:5173', 'http://localhost:5000'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 
 // Middleware for parsing JSON and URL-encoded request bodies
 app.use(express.json());
@@ -109,15 +129,17 @@ app.use((req, res, next) => {
   /**
    * Server Configuration
    * 
-   * Port 5000: Required for Replit environment (not firewalled)
+   * Port: Uses environment variable PORT or defaults to 5000 for Replit
    * Host 0.0.0.0: Allows external connections
-   * reusePort: Enables multiple processes to bind to same port
+   * reusePort: Enables multiple processes to bind to same port (development only)
    */
-  const port = 5000;
+  const port = parseInt(process.env.PORT || '5000');
+  const isDevelopment = app.get("env") === "development";
+  
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
+    reusePort: isDevelopment,
   }, () => {
     log(`serving on port ${port}`);
   });

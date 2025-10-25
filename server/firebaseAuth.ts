@@ -5,15 +5,36 @@
  * Integrates with existing database storage system.
  */
 
-// For now, we'll use Firebase REST API for token verification
-// In production, you'd want to use firebase-admin with a service account
 import type { Express, Request, Response, NextFunction } from "express";
+import * as admin from 'firebase-admin';
 import { storage } from "./storage";
 
-// Note: For production deployment, initialize Firebase Admin SDK with service account
-// const admin = require('firebase-admin');
-// const serviceAccount = require('./path/to/serviceAccountKey.json');
-// admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+// Initialize Firebase Admin SDK
+// In production, this uses environment variables from Render
+// In development, it falls back to REST API verification
+let firebaseAdmin: admin.app.App | null = null;
+
+try {
+  // Check if we have Firebase Admin credentials
+  if (process.env.FIREBASE_PROJECT_ID && 
+      process.env.FIREBASE_PRIVATE_KEY && 
+      process.env.FIREBASE_CLIENT_EMAIL) {
+    
+    firebaseAdmin = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      })
+    });
+    console.log('Firebase Admin SDK initialized successfully');
+  } else {
+    console.log('Firebase Admin credentials not found, using REST API fallback');
+  }
+} catch (error) {
+  console.error('Firebase Admin initialization error:', error);
+  console.log('Falling back to REST API verification');
+}
 
 /**
  * Middleware to verify Firebase ID tokens
@@ -27,8 +48,33 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
 
     const token = authHeader.split('Bearer ')[1];
     
-    // For development, we'll verify tokens using Firebase REST API
-    const response = await fetch(`https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${process.env.VITE_FIREBASE_API_KEY}`, {
+    // Try to verify with Firebase Admin SDK first
+    if (firebaseAdmin) {
+      try {
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        
+        // Attach user info to request
+        (req as any).firebaseUser = {
+          uid: decodedToken.uid,
+          email: decodedToken.email,
+          displayName: decodedToken.name,
+          photoURL: decodedToken.picture,
+          emailVerified: decodedToken.email_verified
+        };
+        
+        return next();
+      } catch (adminError) {
+        console.error('Firebase Admin verification failed, trying REST API fallback:', adminError);
+      }
+    }
+    
+    // Fallback to REST API verification (for development)
+    const apiKey = process.env.VITE_FIREBASE_API_KEY;
+    if (!apiKey) {
+      return res.status(401).json({ message: 'Unauthorized: Firebase API key not configured' });
+    }
+    
+    const response = await fetch(`https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken: token })
