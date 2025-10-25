@@ -1,75 +1,63 @@
-/**
- * Firebase Authentication Integration for Backend
- * 
- * Handles Firebase token verification and user management on the server side.
- * Integrates with existing database storage system.
- */
+// cse21-034/meetingplace-/meetingplace--a19add74c19c86b1799e84b4cd1980c120a5392d/server/firebaseAuth.ts
 
 import type { Express, Request, Response, NextFunction } from "express";
+import * as admin from 'firebase-admin'; // Reverted to static import (RECOMMENDED FIX)
 import { storage } from "./storage";
 
-// Initialize Firebase Admin SDK with better error handling
-let firebaseAdmin: any = null;
+// Initialize Firebase Admin SDK
+let firebaseAdmin: admin.app.App | null = null;
+const isProduction = process.env.NODE_ENV === 'production';
 
-async function initializeFirebaseAdmin() {
-  try {
-    // Dynamically import firebase-admin only when needed
-    const admin = await import('firebase-admin');
+try {
+  // Check if we have Firebase Admin credentials
+  if (process.env.FIREBASE_PROJECT_ID && 
+      process.env.FIREBASE_PRIVATE_KEY && 
+      process.env.FIREBASE_CLIENT_EMAIL) {
     
-    // Check if we have Firebase Admin credentials
-    if (process.env.FIREBASE_PROJECT_ID && 
-        process.env.FIREBASE_PRIVATE_KEY && 
-        process.env.FIREBASE_CLIENT_EMAIL) {
-      
-      // Clean the private key
-      let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-      
-      // 1. Trim whitespace and remove surrounding quotes if accidentally included
-      privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
-      
-      // 2. Replace escaped newline characters (\n) with actual newlines
-      privateKey = privateKey.replace(/\\n/g, '\n');
-      
-      console.log('Firebase Admin: Attempting to initialize with sanitized credentials...');
-      console.log('Project ID:', process.env.FIREBASE_PROJECT_ID);
-      console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
-      console.log('Private Key length:', privateKey.length);
-      console.log('Private Key starts with:', privateKey.substring(0, 50));
-      
-      // Check if already initialized
-      if (admin.apps.length === 0) {
-        firebaseAdmin = admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            privateKey: privateKey,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          })
-        });
-        console.log('Firebase Admin SDK initialized successfully');
-      } else {
-        firebaseAdmin = admin.app();
-        console.log('Firebase Admin SDK already initialized');
-      }
-      
-      return admin;
-    } else {
-      console.log('Firebase Admin credentials not found, using REST API fallback');
-      console.log('Missing:', {
-        projectId: !process.env.FIREBASE_PROJECT_ID,
-        privateKey: !process.env.FIREBASE_PRIVATE_KEY,
-        clientEmail: !process.env.FIREBASE_CLIENT_EMAIL
-      });
-      return null;
+    // Clean the private key
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    
+    // 1. Trim whitespace and remove surrounding quotes/apostrophes
+    privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
+    
+    // 2. Replace escaped newline characters (\n) with actual newlines
+    privateKey = privateKey.replace(/\\n/g, '\n');
+    
+    console.log('Firebase Admin: Attempting to initialize with sanitized credentials...');
+    
+    // Log details only if not in production for security, but we need the feedback now
+    if (!isProduction) {
+        console.log('Project ID:', process.env.FIREBASE_PROJECT_ID);
+        console.log('Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+        console.log('Private Key length:', privateKey.length);
+        console.log('Private Key starts with:', privateKey.substring(0, 50));
     }
-  } catch (error) {
-    console.error('Firebase Admin initialization error:', error);
-    console.log('Falling back to REST API verification');
-    return null;
+    
+    // Initialize synchronously on module load. This relies on the static import.
+    if (admin.apps.length === 0) {
+      firebaseAdmin = admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          privateKey: privateKey, // Use the cleaned privateKey
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        })
+      });
+      console.log('Firebase Admin SDK initialized successfully');
+    } else {
+      // Re-use existing app instance
+      firebaseAdmin = admin.app();
+      console.log('Firebase Admin SDK already initialized');
+    }
+
+  } else {
+    console.log('Firebase Admin credentials not found, using REST API fallback');
   }
+} catch (error) {
+  // If the error persists here, it means the private key content is invalid.
+  console.error('Firebase Admin initialization error:', error);
+  console.log('Falling back to REST API verification');
 }
 
-// Initialize on module load
-const adminPromise = initializeFirebaseAdmin();
 
 /**
  * Middleware to verify Firebase ID tokens
@@ -84,10 +72,10 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     const token = authHeader.split('Bearer ')[1];
     
     // Try to verify with Firebase Admin SDK first
-    const admin = await adminPromise;
-    if (admin && firebaseAdmin) {
+    if (firebaseAdmin) {
       try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
+        // Use the synchronous firebaseAdmin reference
+        const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
         
         // Attach user info to request
         (req as any).firebaseUser = {
@@ -104,10 +92,9 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
       }
     }
     
-    // Fallback to REST API verification
+    // Fallback to REST API verification (for development)
     const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
     if (!apiKey) {
-      console.error('No Firebase API key found in environment');
       return res.status(401).json({ message: 'Unauthorized: Firebase API key not configured' });
     }
     
@@ -118,13 +105,11 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Firebase REST API error:', errorData);
       return res.status(401).json({ message: 'Unauthorized: Invalid token' });
     }
 
     const data = await response.json();
-    const user = data.users?.[0];
+    const user = data.users[0];
 
     if (!user) {
       return res.status(401).json({ message: 'Unauthorized: User not found' });
@@ -145,6 +130,7 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
     res.status(401).json({ message: 'Unauthorized: Token verification failed' });
   }
 };
+
 
 /**
  * Setup Firebase authentication routes
