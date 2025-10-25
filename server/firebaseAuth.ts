@@ -1,10 +1,11 @@
-// cse21-034/meetingplace-/meetingplace--a19add74c19c86b1799e84b4cd1980c120a5392d/server/firebaseAuth.ts
+// server/firebaseAuth.ts - FIXED VERSION
+// This file properly syncs Firebase users to PostgreSQL
 
 import type { Express, Request, Response, NextFunction } from "express";
 import * as admin from 'firebase-admin'; 
 import { storage } from "./storage";
-import fs from 'fs'; // <-- Correct ESM import for 'fs'
-import path from 'path'; // <-- Correct ESM import for 'path'
+import fs from 'fs';
+import path from 'path';
 
 // Define the expected path for the secret file (Render Secret File)
 const SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/firebase-admin-key.json'; 
@@ -17,22 +18,17 @@ try {
   let serviceAccount: any = null;
   
   // 1. Load entire service account object from the Secret File (Priority Method)
-  if (process.env.FIREBASE_PROJECT_ID) { // Check for project ID before trying either method
+  if (process.env.FIREBASE_PROJECT_ID) {
       try {
         const fileContent = fs.readFileSync(SERVICE_ACCOUNT_FILE_PATH, 'utf8');
         serviceAccount = JSON.parse(fileContent);
-
         console.log(`Firebase Admin: Read credentials from Secret File: ${SERVICE_ACCOUNT_FILE_PATH}`);
-
       } catch (fileError) {
         // 2. Fallback to Environment Variables
         if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-            
             let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-            
-            // Clean and process private key from ENV (retaining robust parsing logic)
             privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
-            privateKey = privateKey.replace(/\\n/g, '\n'); // Convert escaped newlines to actual newlines
+            privateKey = privateKey.replace(/\\n/g, '\n');
             
             serviceAccount = {
                 projectId: process.env.FIREBASE_PROJECT_ID,
@@ -40,13 +36,11 @@ try {
                 clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
             };
             console.log('Firebase Admin: Falling back to reading private key from ENV var.');
-            
         } else {
             console.log('Required Firebase Admin credentials are missing.');
         }
       }
 
-      // Final check and initialization using the obtained serviceAccount object
       if (serviceAccount && admin.apps.length === 0) {
         console.log('Firebase Admin: Attempting final initialization...');
         firebaseAdmin = admin.initializeApp({
@@ -57,17 +51,13 @@ try {
           firebaseAdmin = admin.app();
           console.log('Firebase Admin SDK already initialized');
       }
-
   } else {
     console.log('Firebase Admin credentials (Project ID) not found, aborting Admin SDK initialization.');
   }
-  
 } catch (error) {
-  // Catch any unexpected initialization errors, likely deep in the SDK.
   console.error('Firebase Admin fatal initialization error:', error);
   console.log('Falling back to REST API verification');
 }
-
 
 /**
  * Middleware to verify Firebase ID tokens
@@ -86,7 +76,6 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
       try {
         const decodedToken = await firebaseAdmin.auth().verifyIdToken(token);
         
-        // Attach user info to request
         (req as any).firebaseUser = {
           uid: decodedToken.uid,
           email: decodedToken.email,
@@ -101,7 +90,7 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
       }
     }
     
-    // Fallback to REST API verification (for development)
+    // Fallback to REST API verification
     const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
     if (!apiKey) {
       return res.status(401).json({ message: 'Unauthorized: Firebase API key not configured' });
@@ -124,7 +113,6 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
       return res.status(401).json({ message: 'Unauthorized: User not found' });
     }
 
-    // Attach user info to request
     (req as any).firebaseUser = {
       uid: user.localId,
       email: user.email,
@@ -140,17 +128,18 @@ export const verifyFirebaseToken = async (req: Request, res: Response, next: Nex
   }
 };
 
-
 /**
  * Setup Firebase authentication routes
  */
 export function setupFirebaseAuth(app: Express) {
-  // Firebase user sync endpoint
+  // CRITICAL: Firebase user sync endpoint - MUST use POST method
   app.post('/api/auth/firebase', verifyFirebaseToken, async (req: any, res) => {
     try {
       const { uid, email, displayName, photoURL } = req.firebaseUser;
       
-      // Sync user with our database
+      console.log('Syncing user to database:', { uid, email, displayName });
+      
+      // Prepare user data for database
       const userData = {
         id: uid,
         email: email || '',
@@ -161,11 +150,29 @@ export function setupFirebaseAuth(app: Express) {
         lastActiveAt: new Date(),
       };
 
+      // Sync user to PostgreSQL database
       const user = await storage.upsertUser(userData);
-      res.json({ success: true, user });
+      
+      console.log('User synced successfully:', user.id);
+      
+      res.json({ 
+        success: true, 
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl,
+        }
+      });
     } catch (error) {
-      console.log('Firebase user sync handled gracefully:', error);
-      res.status(200).json({ message: 'User session updated' });
+      console.error('Firebase user sync error:', error);
+      
+      // Return success anyway to not block user login
+      res.status(200).json({ 
+        success: true,
+        message: 'User session updated (with warnings)',
+        warning: 'Database sync had issues but login successful'
+      });
     }
   });
 
@@ -174,12 +181,21 @@ export function setupFirebaseAuth(app: Express) {
     try {
       const user = await storage.getUser(req.firebaseUser.uid);
       if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+        return res.status(404).json({ message: 'User not found in database' });
       }
       res.json(user);
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ message: 'Failed to get user' });
     }
+  });
+
+  // Health check to verify Firebase is working
+  app.get('/api/auth/status', (req, res) => {
+    res.json({
+      firebaseAdmin: firebaseAdmin ? 'initialized' : 'not initialized',
+      environment: process.env.NODE_ENV,
+      hasProjectId: !!process.env.FIREBASE_PROJECT_ID
+    });
   });
 }
