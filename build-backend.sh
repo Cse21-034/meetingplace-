@@ -5,12 +5,14 @@ echo "Building backend for Render deployment..."
 # Install dependencies
 npm install
 
-# Build with esbuild - mark firebase-admin as external to avoid bundling issues
+# Build with esbuild - explicitly mark built-in Node modules (fs, path) as external
 echo "Bundling backend code..."
 npx esbuild server/index.ts \
   --platform=node \
   --packages=external \
   --external:firebase-admin \
+  --external:fs \
+  --external:path \
   --bundle \
   --format=esm \
   --outdir=dist
