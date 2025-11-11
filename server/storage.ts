@@ -53,94 +53,61 @@ import { db } from "./db";
 import { eq, desc, and, or, sql, count } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-
-  // Post operations
   getPosts(limit?: number, offset?: number): Promise<Post[]>;
   getPostById(id: number): Promise<Post | undefined>;
   createPost(post: InsertPost): Promise<Post>;
   updatePost(id: number, updates: Partial<Post>): Promise<Post>;
   deletePost(id: number): Promise<void>;
-
-  // Comment operations
   getCommentsByPostId(postId: number): Promise<Comment[]>;
   createComment(comment: InsertComment): Promise<Comment>;
   updateComment(id: number, updates: Partial<Comment>): Promise<Comment>;
   deleteComment(id: number): Promise<void>;
-
-  // Vote operations
   getVote(userId: string, postId?: number, commentId?: number): Promise<Vote | undefined>;
   createVote(vote: InsertVote): Promise<Vote>;
   updateVote(id: number, type: string): Promise<Vote>;
   deleteVote(id: number): Promise<void>;
-
-  // Bookmark operations
   getBookmarks(userId: string): Promise<Bookmark[]>;
   createBookmark(bookmark: InsertBookmark): Promise<Bookmark>;
   deleteBookmark(userId: string, postId: number): Promise<void>;
-
-  // Notification operations
   getNotifications(userId: string): Promise<Notification[]>;
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationAsRead(id: number): Promise<void>;
-
-  // Group operations
   getGroups(): Promise<Group[]>;
   getGroupById(id: number): Promise<Group | undefined>;
   createGroup(group: InsertGroup): Promise<Group>;
   joinGroup(groupId: number, userId: string): Promise<void>;
   leaveGroup(groupId: number, userId: string): Promise<void>;
-
-  // Search operations
   searchPosts(query: string, limit?: number): Promise<Post[]>;
-
-  // Monetization operations
   getSubscriptions(userId: string): Promise<Subscription[]>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: number, updates: Partial<Subscription>): Promise<Subscription>;
   cancelSubscription(id: number): Promise<void>;
-
-  // Tips operations
   getTips(userId: string): Promise<Tip[]>;
   createTip(tip: InsertTip): Promise<Tip>;
   updateTip(id: number, updates: Partial<Tip>): Promise<Tip>;
-
-  // Marketplace operations
   getMarketplaceItems(limit?: number, offset?: number): Promise<MarketplaceItem[]>;
   getMarketplaceItemById(id: number): Promise<MarketplaceItem | undefined>;
   createMarketplaceItem(item: InsertMarketplaceItem): Promise<MarketplaceItem>;
   updateMarketplaceItem(id: number, updates: Partial<MarketplaceItem>): Promise<MarketplaceItem>;
   deleteMarketplaceItem(id: number): Promise<void>;
-
-  // Sponsored content operations
   getSponsoredContent(limit?: number): Promise<SponsoredContent[]>;
   createSponsoredContent(content: InsertSponsoredContent): Promise<SponsoredContent>;
   updateSponsoredContent(id: number, updates: Partial<SponsoredContent>): Promise<SponsoredContent>;
-
-  // Wisdom transactions
   getWisdomTransactions(userId: string): Promise<WisdomTransaction[]>;
   createWisdomTransaction(transaction: InsertWisdomTransaction): Promise<WisdomTransaction>;
   updateUserWisdomPoints(userId: string, points: number): Promise<void>;
-
-  // Payment settings
   getPaymentSettings(): Promise<PaymentSetting[]>;
   updatePaymentSetting(id: number, updates: Partial<PaymentSetting>): Promise<PaymentSetting>;
   createPaymentSetting(setting: InsertPaymentSetting): Promise<PaymentSetting>;
-
-  // User payment methods
   getUserPaymentMethods(userId: string): Promise<UserPaymentMethod[]>;
   createUserPaymentMethod(method: InsertUserPaymentMethod): Promise<UserPaymentMethod>;
   updateUserPaymentMethod(id: number, updates: Partial<UserPaymentMethod>): Promise<UserPaymentMethod>;
   deleteUserPaymentMethod(id: number): Promise<void>;
-
-  // App configuration
   getAppConfig(category?: string): Promise<AppConfig[]>;
   updateAppConfig(key: string, value: string): Promise<AppConfig>;
   createAppConfig(config: InsertAppConfig): Promise<AppConfig>;
-
-  // Transactions
   getTransactions(userId: string, limit?: number): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: Partial<Transaction>): Promise<Transaction>;
@@ -153,93 +120,153 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
- // Add this to server/storage.ts - Replace the upsertUser method
-
-async upsertUser(userData: UpsertUser): Promise<User> {
-  try {
-    console.log('Upserting user with data:', userData);
-    
-    // First try to get existing user
-    const existingUser = await this.getUser(userData.id);
-    
-    if (existingUser) {
-      // Update existing user with ALL fields
-      const [updatedUser] = await db
-        .update(users)
-        .set({
-          email: userData.email || existingUser.email,
-          username: userData.username || existingUser.username,
-          displayName: userData.displayName || existingUser.displayName,
-          firstName: userData.firstName || existingUser.firstName,
-          lastName: userData.lastName || existingUser.lastName,
-          profileImageUrl: userData.profileImageUrl || existingUser.profileImageUrl,
-          avatarUrl: userData.avatarUrl || existingUser.avatarUrl,
-          lastActiveAt: new Date(),
-          isOnline: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userData.id))
-        .returning();
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    try {
+      console.log('Upserting user with data:', userData);
       
-      console.log('User updated successfully:', updatedUser.id);
-      return updatedUser;
-    } else {
-      // Create new user with complete data
-      const newUserData = {
+      const existingUser = await this.getUser(userData.id);
+      
+      if (existingUser) {
+        const [updatedUser] = await db
+          .update(users)
+          .set({
+            email: userData.email || existingUser.email,
+            username: userData.username || existingUser.username,
+            displayName: userData.displayName || existingUser.displayName,
+            firstName: userData.firstName || existingUser.firstName,
+            lastName: userData.lastName || existingUser.lastName,
+            profileImageUrl: userData.profileImageUrl || existingUser.profileImageUrl,
+            avatarUrl: userData.avatarUrl || existingUser.avatarUrl,
+            lastActiveAt: new Date(),
+            isOnline: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, userData.id))
+          .returning();
+        
+        console.log('User updated successfully:', updatedUser.id);
+        return updatedUser;
+      } else {
+        const newUserData = {
+          id: userData.id,
+          email: userData.email || '',
+          username: userData.username || userData.email?.split('@')[0] || userData.id,
+          displayName: userData.displayName || userData.username || userData.id,
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          profileImageUrl: userData.profileImageUrl || '',
+          avatarUrl: userData.avatarUrl || userData.profileImageUrl || '',
+          isOnline: true,
+          lastActiveAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        
+        const [newUser] = await db.insert(users).values(newUserData).returning();
+        console.log('New user created successfully:', newUser.id);
+        return newUser;
+      }
+    } catch (error) {
+      console.error('User upsert error:', error);
+      
+      const fallbackUser = await this.getUser(userData.id);
+      if (fallbackUser) {
+        return fallbackUser;
+      }
+      
+      const [minimalUser] = await db.insert(users).values({
         id: userData.id,
         email: userData.email || '',
-        username: userData.username || userData.email?.split('@')[0] || userData.id,
-        displayName: userData.displayName || userData.username || userData.id,
+        username: userData.username || userData.id,
+        displayName: userData.displayName || userData.id,
         firstName: userData.firstName || '',
         lastName: userData.lastName || '',
-        profileImageUrl: userData.profileImageUrl || '',
-        avatarUrl: userData.avatarUrl || userData.profileImageUrl || '',
-        isOnline: true,
-        lastActiveAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      }).returning();
       
-      const [newUser] = await db.insert(users).values(newUserData).returning();
-      console.log('New user created successfully:', newUser.id);
-      return newUser;
+      return minimalUser;
     }
-  } catch (error) {
-    console.error('User upsert error:', error);
-    
-    // Fallback: try to get existing user
-    const fallbackUser = await this.getUser(userData.id);
-    if (fallbackUser) {
-      return fallbackUser;
-    }
-    
-    // Last resort: create minimal user
-    const [minimalUser] = await db.insert(users).values({
-      id: userData.id,
-      email: userData.email || '',
-      username: userData.username || userData.id,
-      displayName: userData.displayName || userData.id,
-      firstName: userData.firstName || '',
-      lastName: userData.lastName || '',
-    }).returning();
-    
-    return minimalUser;
   }
-}
 
   // Post operations
   async getPosts(limit = 20, offset = 0): Promise<Post[]> {
-    return await db
-      .select()
+    const result = await db
+      .select({
+        // Select all post fields explicitly
+        id: posts.id,
+        authorId: posts.authorId,
+        groupId: posts.groupId,
+        type: posts.type,
+        title: posts.title,
+        content: posts.content,
+        imageUrl: posts.imageUrl,
+        linkUrl: posts.linkUrl,
+        pollOptions: posts.pollOptions,
+        tags: posts.tags,
+        isAnonymous: posts.isAnonymous,
+        allowComments: posts.allowComments,
+        upvotes: posts.upvotes,
+        downvotes: posts.downvotes,
+        commentCount: posts.commentCount,
+        createdAt: posts.createdAt,
+        updatedAt: posts.updatedAt,
+        // Select relevant author fields into a nested 'author' object
+        author: {
+          id: users.id,
+          displayName: users.displayName,
+          profileImageUrl: users.profileImageUrl,
+          isVerified: users.isVerified,
+          verificationBadge: users.verificationBadge,
+          location: users.location,
+          createdAt: users.createdAt,
+        },
+      })
       .from(posts)
+      .leftJoin(users, eq(posts.authorId, users.id))
       .orderBy(desc(posts.createdAt))
       .limit(limit)
       .offset(offset);
+
+    // Cast the result to the desired type
+    return result as unknown as Post[];
   }
 
   async getPostById(id: number): Promise<Post | undefined> {
-    const [post] = await db.select().from(posts).where(eq(posts.id, id));
-    return post;
+    const [result] = await db
+      .select({
+        // Select all post fields explicitly
+        id: posts.id,
+        authorId: posts.authorId,
+        groupId: posts.groupId,
+        type: posts.type,
+        title: posts.title,
+        content: posts.content,
+        imageUrl: posts.imageUrl,
+        linkUrl: posts.linkUrl,
+        pollOptions: posts.pollOptions,
+        tags: posts.tags,
+        isAnonymous: posts.isAnonymous,
+        allowComments: posts.allowComments,
+        upvotes: posts.upvotes,
+        downvotes: posts.downvotes,
+        commentCount: posts.commentCount,
+        createdAt: posts.createdAt,
+        updatedAt: posts.updatedAt,
+        // Select relevant author fields into a nested 'author' object
+        author: {
+          id: users.id,
+          displayName: users.displayName,
+          profileImageUrl: users.profileImageUrl,
+          isVerified: users.isVerified,
+          verificationBadge: users.verificationBadge,
+          location: users.location,
+          createdAt: users.createdAt,
+        },
+      })
+      .from(posts)
+      .leftJoin(users, eq(posts.authorId, users.id))
+      .where(eq(posts.id, id));
+
+    return result as unknown as Post | undefined;
   }
 
   async createPost(post: InsertPost): Promise<Post> {
@@ -262,22 +289,45 @@ async upsertUser(userData: UpsertUser): Promise<User> {
 
   // Comment operations
   async getCommentsByPostId(postId: number): Promise<Comment[]> {
-    return await db
-      .select()
+    const result = await db
+      .select({
+        // Select all comment fields explicitly
+        id: comments.id,
+        postId: comments.postId,
+        authorId: comments.authorId,
+        parentId: comments.parentId,
+        content: comments.content,
+        upvotes: comments.upvotes,
+        downvotes: comments.downvotes,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        // Select relevant author fields into a nested 'author' object
+        author: {
+          id: users.id,
+          displayName: users.displayName,
+          profileImageUrl: users.profileImageUrl,
+          isVerified: users.isVerified,
+          verificationBadge: users.verificationBadge,
+        },
+      })
       .from(comments)
+      .leftJoin(users, eq(comments.authorId, users.id))
       .where(eq(comments.postId, postId))
       .orderBy(desc(comments.createdAt));
+
+    // Cast the result to the desired type
+    return result as unknown as Comment[];
   }
 
   async createComment(comment: InsertComment): Promise<Comment> {
     const [newComment] = await db.insert(comments).values(comment).returning();
     
     // Update post comment count
-    if (comment.postId) {
+    if (newComment.postId) {
       await db
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
-        .where(eq(posts.id, comment.postId));
+        .where(eq(posts.id, newComment.postId));
     }
     
     return newComment;
