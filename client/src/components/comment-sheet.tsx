@@ -43,7 +43,7 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   const [newComment, setNewComment] = useState("");
   const [replyToId, setReplyToId] = useState<number | null>(null);
 
-  // UPDATED: Fetch real data. The response is an array of flat comments.
+  // Fetch real data. The response is an array of flat comments including author data.
   const { data: fetchedComments, isLoading, error } = useQuery<CommentData[]>({
     queryKey: ["/api/posts", postId, "comments"],
     enabled: isOpen,
@@ -113,9 +113,10 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   };
 
   if (error && isUnauthorizedError(error as Error)) {
+    // If auth fails, navigate user back to login/landing
     toast({
       title: "Unauthorized",
-      description: "You are logged out. Logging in again...",
+      description: "Session expired. Logging in again...",
       variant: "destructive",
     });
     setTimeout(() => {
@@ -125,7 +126,7 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   }
 
   const renderComment = (comment: CommentData, isReply = false) => {
-    // UPDATED: Use fetched author data
+    // Use fetched author data
     const authorName = comment.author?.displayName || 'Anonymous';
     const avatarUrl = comment.author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&size=32`;
     
