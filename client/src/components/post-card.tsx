@@ -1,3 +1,5 @@
+// client/src/components/post-card.tsx
+
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +36,16 @@ interface PostCardProps {
     downvotes: number;
     commentCount: number;
     createdAt: string;
+    // Updated to expect nested author object from the API
+    author: { 
+        id: string;
+        displayName: string;
+        profileImageUrl: string;
+        isVerified: boolean;
+        verificationBadge?: string | null;
+        location?: string;
+        createdAt?: string;
+    } | null;
   };
 }
 
@@ -149,39 +161,59 @@ export default function PostCard({ post }: PostCardProps) {
     }
   };
 
+  const getBadgeColor = (badge: string) => {
+    switch (badge) {
+      case 'elder':
+        return 'bg-cultural text-white';
+      case 'mentor':
+        return 'bg-secondary text-white';
+      case 'expert':
+        return 'bg-primary text-white';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  };
+  
   const getVerificationBadge = () => {
-    // Mock user data for display
-    const mockUser = {
-      name: post.isAnonymous ? "Anonymous" : "Mmoloki Serame",
-      location: "Gaborone",
-      badge: "Elder",
-      isVerified: true,
-      avatar: post.isAnonymous ? null : "https://ui-avatars.com/api/?name=Mmoloki+Serame&size=40",
-    };
-
+    // UPDATED: Use actual author data from props, removing mock data
+    const author = post.author;
+    
+    // Fallbacks if author data is missing or anonymous is checked
+    const name = post.isAnonymous ? "Anonymous" : author?.displayName || "Kgotla User";
+    const avatarUrl = post.isAnonymous 
+      ? `https://ui-avatars.com/api/?name=Anonymous&size=40` 
+      : author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(author?.displayName || "User")}&size=40`;
+    const isVerified = author?.isVerified || false;
+    const badge = author?.verificationBadge;
+    
+    // Use fetched location if available
+    const location = author?.location || "Online"; 
+    
     return (
       <div className="flex items-start space-x-3">
         <img
-          src={mockUser.avatar || "https://ui-avatars.com/api/?name=Anonymous&size=40"}
+          src={avatarUrl}
           alt="User avatar"
           className="w-10 h-10 rounded-full object-cover"
         />
         <div className="flex-1">
           <div className="flex items-center space-x-2">
-            <h3 className="font-medium text-neutral">{mockUser.name}</h3>
-            {mockUser.isVerified && !post.isAnonymous && (
+            <h3 className="font-medium text-neutral">{name}</h3>
+            {/* Show verified icon and badge only if not anonymous */}
+            {isVerified && !post.isAnonymous && (
               <div className="w-4 h-4 bg-cultural rounded-full flex items-center justify-center">
                 <span className="text-white text-xs">✓</span>
               </div>
             )}
-            {mockUser.badge && !post.isAnonymous && (
-              <Badge variant="secondary" className="text-xs">
-                {mockUser.badge}
+            {badge && !post.isAnonymous && (
+              <Badge variant="secondary" className={`text-xs ${getBadgeColor(badge)}`}>
+                {/* Capitalize first letter */}
+                {badge.charAt(0).toUpperCase() + badge.slice(1)}
               </Badge>
             )}
           </div>
           <p className="text-sm text-gray-500">
-            {mockUser.location} • {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+            {location} • {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
           </p>
         </div>
         <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
@@ -200,8 +232,12 @@ export default function PostCard({ post }: PostCardProps) {
           { text: "Cultural preservation activities", votes: 23 },
         ];
         
+        // Mock votes count for display purpose, replace with real logic if implemented
+        const totalVotes = pollOptions.reduce((sum: number, option: any) => sum + option.votes, 0);
+
         return (
           <div className="space-y-3">
+            {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
             <p className="text-neutral leading-relaxed">{post.content}</p>
             <div className="space-y-2">
               {pollOptions.map((option: any, index: number) => (
@@ -222,7 +258,7 @@ export default function PostCard({ post }: PostCardProps) {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500">127 votes • Poll closes in 2 days</p>
+            <p className="text-xs text-gray-500">{totalVotes} votes • Poll closes in 2 days</p>
           </div>
         );
 
@@ -234,6 +270,7 @@ export default function PostCard({ post }: PostCardProps) {
                 <HelpCircle className="text-primary" size={16} />
                 <span className="text-sm font-medium text-primary">Question</span>
               </div>
+              {post.title && <h4 className="font-semibold text-lg text-neutral mb-1">{post.title}</h4>}
               <p className="text-neutral leading-relaxed">{post.content}</p>
             </div>
           </div>
@@ -254,13 +291,19 @@ export default function PostCard({ post }: PostCardProps) {
         );
 
       default:
-        return <p className="text-neutral leading-relaxed">{post.content}</p>;
+        // Text post
+        return (
+          <div className="space-y-2">
+            {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
+            <p className="text-neutral leading-relaxed">{post.content}</p>
+          </div>
+        )
     }
   };
 
   return (
     <>
-      <Card className="rounded-none border-x-0 border-t-0 border-b shadow-none">
+      <Card className="post-card rounded-none border-x-0 border-t-0 border-b shadow-none">
         <CardContent className="p-0">
           <div className="px-4 py-3">
             {getVerificationBadge()}
@@ -271,9 +314,11 @@ export default function PostCard({ post }: PostCardProps) {
             
             {post.tags && post.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
-                {post.tags.map((tag, index) => (
+                {/* Ensure tags is an array of strings before mapping */}
+                {Array.isArray(post.tags) && post.tags.map((tag, index) => (
                   <Badge key={index} variant="secondary" className="text-xs">
-                    {tag}
+                    {/* Format tag with # if it doesn't already have one */}
+                    {tag.startsWith('#') ? tag : `#${tag}`}
                   </Badge>
                 ))}
               </div>
