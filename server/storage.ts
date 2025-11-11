@@ -153,46 +153,79 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    try {
-      // First try to get existing user
-      const existingUser = await this.getUser(userData.id);
-      if (existingUser) {
-        // Update existing user
-        const [updatedUser] = await db
-          .update(users)
-          .set({
-            displayName: userData.displayName,
-            avatarUrl: userData.avatarUrl,
-            lastActiveAt: new Date(),
-            isOnline: true,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, userData.id))
-          .returning();
-        return updatedUser;
-      } else {
-        // Create new user
-        const [newUser] = await db.insert(users).values(userData).returning();
-        return newUser;
-      }
-    } catch (error) {
-      console.log('User upsert handled gracefully:', error);
-      // If all fails, try to get existing user one more time
-      const fallbackUser = await this.getUser(userData.id);
-      if (fallbackUser) {
-        return fallbackUser;
-      }
-      // Create minimal user record
-      const [minimalUser] = await db.insert(users).values({
+ // Add this to server/storage.ts - Replace the upsertUser method
+
+async upsertUser(userData: UpsertUser): Promise<User> {
+  try {
+    console.log('Upserting user with data:', userData);
+    
+    // First try to get existing user
+    const existingUser = await this.getUser(userData.id);
+    
+    if (existingUser) {
+      // Update existing user with ALL fields
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          email: userData.email || existingUser.email,
+          username: userData.username || existingUser.username,
+          displayName: userData.displayName || existingUser.displayName,
+          firstName: userData.firstName || existingUser.firstName,
+          lastName: userData.lastName || existingUser.lastName,
+          profileImageUrl: userData.profileImageUrl || existingUser.profileImageUrl,
+          avatarUrl: userData.avatarUrl || existingUser.avatarUrl,
+          lastActiveAt: new Date(),
+          isOnline: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userData.id))
+        .returning();
+      
+      console.log('User updated successfully:', updatedUser.id);
+      return updatedUser;
+    } else {
+      // Create new user with complete data
+      const newUserData = {
         id: userData.id,
-        email: userData.email,
-        username: userData.username || userData.id,
+        email: userData.email || '',
+        username: userData.username || userData.email?.split('@')[0] || userData.id,
         displayName: userData.displayName || userData.username || userData.id,
-      }).returning();
-      return minimalUser;
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        profileImageUrl: userData.profileImageUrl || '',
+        avatarUrl: userData.avatarUrl || userData.profileImageUrl || '',
+        isOnline: true,
+        lastActiveAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      const [newUser] = await db.insert(users).values(newUserData).returning();
+      console.log('New user created successfully:', newUser.id);
+      return newUser;
     }
+  } catch (error) {
+    console.error('User upsert error:', error);
+    
+    // Fallback: try to get existing user
+    const fallbackUser = await this.getUser(userData.id);
+    if (fallbackUser) {
+      return fallbackUser;
+    }
+    
+    // Last resort: create minimal user
+    const [minimalUser] = await db.insert(users).values({
+      id: userData.id,
+      email: userData.email || '',
+      username: userData.username || userData.id,
+      displayName: userData.displayName || userData.id,
+      firstName: userData.firstName || '',
+      lastName: userData.lastName || '',
+    }).returning();
+    
+    return minimalUser;
   }
+}
 
   // Post operations
   async getPosts(limit = 20, offset = 0): Promise<Post[]> {
