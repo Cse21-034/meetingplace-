@@ -198,16 +198,6 @@
     min-width: 44px;
   }
 
-  /* Custom post card styles */
-  .post-card {
-    @apply bg-card border-b border-border;
-    transition: background-color 0.2s ease;
-  }
-
-  .post-card:hover {
-    @apply bg-muted/50;
-  }
-
   /* Verification badge styles */
   .verification-badge {
     @apply inline-flex items-center justify-center w-4 h-4 rounded-full text-xs font-medium;
