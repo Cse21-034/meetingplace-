@@ -53,61 +53,94 @@ import { db } from "./db";
 import { eq, desc, and, or, sql, count } from "drizzle-orm";
 
 export interface IStorage {
+  // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+
+  // Post operations
   getPosts(limit?: number, offset?: number): Promise<Post[]>;
   getPostById(id: number): Promise<Post | undefined>;
   createPost(post: InsertPost): Promise<Post>;
   updatePost(id: number, updates: Partial<Post>): Promise<Post>;
   deletePost(id: number): Promise<void>;
+
+  // Comment operations
   getCommentsByPostId(postId: number): Promise<Comment[]>;
   createComment(comment: InsertComment): Promise<Comment>;
   updateComment(id: number, updates: Partial<Comment>): Promise<Comment>;
   deleteComment(id: number): Promise<void>;
+
+  // Vote operations
   getVote(userId: string, postId?: number, commentId?: number): Promise<Vote | undefined>;
   createVote(vote: InsertVote): Promise<Vote>;
   updateVote(id: number, type: string): Promise<Vote>;
   deleteVote(id: number): Promise<void>;
+
+  // Bookmark operations
   getBookmarks(userId: string): Promise<Bookmark[]>;
   createBookmark(bookmark: InsertBookmark): Promise<Bookmark>;
   deleteBookmark(userId: string, postId: number): Promise<void>;
+
+  // Notification operations
   getNotifications(userId: string): Promise<Notification[]>;
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationAsRead(id: number): Promise<void>;
+
+  // Group operations
   getGroups(): Promise<Group[]>;
   getGroupById(id: number): Promise<Group | undefined>;
   createGroup(group: InsertGroup): Promise<Group>;
   joinGroup(groupId: number, userId: string): Promise<void>;
   leaveGroup(groupId: number, userId: string): Promise<void>;
+
+  // Search operations
   searchPosts(query: string, limit?: number): Promise<Post[]>;
+
+  // Monetization operations
   getSubscriptions(userId: string): Promise<Subscription[]>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: number, updates: Partial<Subscription>): Promise<Subscription>;
   cancelSubscription(id: number): Promise<void>;
+
+  // Tips operations
   getTips(userId: string): Promise<Tip[]>;
   createTip(tip: InsertTip): Promise<Tip>;
   updateTip(id: number, updates: Partial<Tip>): Promise<Tip>;
+
+  // Marketplace operations
   getMarketplaceItems(limit?: number, offset?: number): Promise<MarketplaceItem[]>;
   getMarketplaceItemById(id: number): Promise<MarketplaceItem | undefined>;
   createMarketplaceItem(item: InsertMarketplaceItem): Promise<MarketplaceItem>;
   updateMarketplaceItem(id: number, updates: Partial<MarketplaceItem>): Promise<MarketplaceItem>;
   deleteMarketplaceItem(id: number): Promise<void>;
+
+  // Sponsored content operations
   getSponsoredContent(limit?: number): Promise<SponsoredContent[]>;
   createSponsoredContent(content: InsertSponsoredContent): Promise<SponsoredContent>;
   updateSponsoredContent(id: number, updates: Partial<SponsoredContent>): Promise<SponsoredContent>;
+
+  // Wisdom transactions
   getWisdomTransactions(userId: string): Promise<WisdomTransaction[]>;
   createWisdomTransaction(transaction: InsertWisdomTransaction): Promise<WisdomTransaction>;
   updateUserWisdomPoints(userId: string, points: number): Promise<void>;
+
+  // Payment settings
   getPaymentSettings(): Promise<PaymentSetting[]>;
   updatePaymentSetting(id: number, updates: Partial<PaymentSetting>): Promise<PaymentSetting>;
   createPaymentSetting(setting: InsertPaymentSetting): Promise<PaymentSetting>;
+
+  // User payment methods
   getUserPaymentMethods(userId: string): Promise<UserPaymentMethod[]>;
   createUserPaymentMethod(method: InsertUserPaymentMethod): Promise<UserPaymentMethod>;
   updateUserPaymentMethod(id: number, updates: Partial<UserPaymentMethod>): Promise<UserPaymentMethod>;
   deleteUserPaymentMethod(id: number): Promise<void>;
+
+  // App configuration
   getAppConfig(category?: string): Promise<AppConfig[]>;
   updateAppConfig(key: string, value: string): Promise<AppConfig>;
   createAppConfig(config: InsertAppConfig): Promise<AppConfig>;
+
+  // Transactions
   getTransactions(userId: string, limit?: number): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: Partial<Transaction>): Promise<Transaction>;
