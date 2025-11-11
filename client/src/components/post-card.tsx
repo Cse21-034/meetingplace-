@@ -175,7 +175,6 @@ export default function PostCard({ post }: PostCardProps) {
   };
   
   const getVerificationBadge = () => {
-    // UPDATED: Use actual author data from props, removing mock data
     const author = post.author;
     
     // Fallbacks if author data is missing or anonymous is checked
@@ -303,7 +302,9 @@ export default function PostCard({ post }: PostCardProps) {
 
   return (
     <>
-      <Card className="post-card rounded-none border-x-0 border-t-0 border-b shadow-none">
+      <Card 
+        className="rounded-none border-x-0 border-t-0 border-b shadow-none transition-colors hover:bg-muted/50"
+      >
         <CardContent className="p-0">
           <div className="px-4 py-3">
             {getVerificationBadge()}
