@@ -1,10 +1,4 @@
-/**
- * Firebase Configuration and Authentication Setup
- * 
- * Initializes Firebase with Google authentication for the Kgotla app.
- * Handles user sign-in, sign-out, and authentication state management.
- */
-
+// client/src/lib/firebase.ts - COMPLETE VERSION with Email/Password
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
@@ -14,10 +8,12 @@ import {
   signOut,
   GoogleAuthProvider,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
   User
 } from "firebase/auth";
 
-// Firebase configuration using environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
@@ -26,11 +22,9 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('email');
 googleProvider.addScope('profile');
@@ -64,6 +58,66 @@ export const handleGoogleRedirectResult = async () => {
     return result?.user || null;
   } catch (error) {
     console.error('Google redirect result error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Sign up with email and password
+ */
+export const signUpWithEmail = async (
+  email: string, 
+  password: string, 
+  displayName: string
+) => {
+  try {
+    // Create user account
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // Update profile with display name
+    await updateProfile(user, {
+      displayName: displayName
+    });
+    
+    // Reload user to get updated profile
+    await user.reload();
+    
+    return auth.currentUser;
+  } catch (error: any) {
+    console.error('Email sign-up error:', error);
+    
+    // Provide user-friendly error messages
+    if (error.code === 'auth/email-already-in-use') {
+      throw new Error('This email is already registered. Please sign in instead.');
+    } else if (error.code === 'auth/weak-password') {
+      throw new Error('Password is too weak. Please use at least 6 characters.');
+    } else if (error.code === 'auth/invalid-email') {
+      throw new Error('Invalid email address.');
+    }
+    
+    throw error;
+  }
+};
+
+/**
+ * Sign in with email and password
+ */
+export const signInWithEmail = async (email: string, password: string) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return userCredential.user;
+  } catch (error: any) {
+    console.error('Email sign-in error:', error);
+    
+    if (error.code === 'auth/user-not-found') {
+      throw new Error('No account found with this email.');
+    } else if (error.code === 'auth/wrong-password') {
+      throw new Error('Incorrect password.');
+    } else if (error.code === 'auth/invalid-email') {
+      throw new Error('Invalid email address.');
+    }
+    
     throw error;
   }
 };
