@@ -16,7 +16,14 @@ interface CommentSheetProps {
   postId: number;
 }
 
-// Define structure for a single comment fetched from the API
+interface CommentAuthor {
+  id: string;
+  displayName: string;
+  profileImageUrl?: string;
+  isVerified: boolean;
+  verificationBadge?: string | null;
+}
+
 interface CommentData {
   id: number;
   postId: number;
@@ -24,14 +31,9 @@ interface CommentData {
   parentId: number | null;
   content: string;
   upvotes: number;
+  downvotes: number;
   createdAt: string;
-  author: {
-    id: string;
-    displayName: string;
-    profileImageUrl: string;
-    isVerified: boolean;
-    verificationBadge?: string | null;
-  } | null;
+  author: CommentAuthor | null;
 }
 
 export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetProps) {
@@ -41,7 +43,7 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   const [newComment, setNewComment] = useState("");
   const [replyToId, setReplyToId] = useState<number | null>(null);
 
-  // Fetch real data. The response is an array of flat comments including author data.
+  // Fetch comments with proper typing
   const { data: fetchedComments, isLoading, error } = useQuery<CommentData[]>({
     queryKey: ["/api/posts", postId, "comments"],
     enabled: isOpen,
@@ -50,16 +52,15 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
 
   const createCommentMutation = useMutation({
     mutationFn: async ({ content, parentId }: { content: string; parentId?: number }) => {
-      // API endpoint is correctly POST /api/posts/:id/comments
       await apiRequest("POST", `/api/posts/${postId}/comments`, {
         content,
         parentId,
       });
     },
     onSuccess: () => {
-      // Invalidate queries to refetch the list and update the main post's comment count
       queryClient.invalidateQueries({ queryKey: ["/api/posts", postId, "comments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
       setNewComment("");
       setReplyToId(null);
     },
@@ -97,7 +98,6 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
 
     createCommentMutation.mutate({
       content: newComment,
-      postId: postId,
       parentId: replyToId || undefined,
     });
   };
@@ -111,7 +111,6 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   };
 
   if (error && isUnauthorizedError(error as Error)) {
-    // If auth fails, navigate user back to login/landing
     toast({
       title: "Unauthorized",
       description: "Session expired. Logging in again...",
@@ -124,7 +123,6 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   }
 
   const renderComment = (comment: CommentData, isReply = false) => {
-    // Use fetched author data
     const authorName = comment.author?.displayName || 'Anonymous';
     const avatarUrl = comment.author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&size=32`;
     
@@ -166,19 +164,18 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
     );
   };
   
-  // LOGIC: Structure flat comments into a threaded list
+  // Structure comments
   const allComments: CommentData[] = fetchedComments || [];
   
   const topLevelComments = allComments
-    .filter((c) => c.parentId === null) // Filter top-level comments
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Sort by oldest first
+    .filter((c) => c.parentId === null)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const structuredComments = topLevelComments.map((c) => ({
       ...c,
-      replies: allComments.filter((r) => r.parentId === c.id) // Attach replies
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) // Sort replies by oldest first
+      replies: allComments.filter((r) => r.parentId === c.id)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }));
-
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
@@ -202,7 +199,6 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
             structuredComments.map((comment: any) => (
               <div key={comment.id}>
                 {renderComment(comment, false)}
-                {/* Render replies */}
                 {comment.replies.map((reply: CommentData) => renderComment(reply, true))}
               </div>
             ))
@@ -219,7 +215,6 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
           {replyToId && (
             <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg mb-3">
               <span className="text-sm text-gray-600">
-                {/* Dynamically find reply target name */}
                 Replying to {allComments.find((c: CommentData) => c.id === replyToId)?.author?.displayName || 'User'}
               </span>
               <Button variant="ghost" size="sm" onClick={cancelReply}>
