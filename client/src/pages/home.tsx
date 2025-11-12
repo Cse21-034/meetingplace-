@@ -14,6 +14,32 @@ import AppMenu from "@/components/app-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+interface PostAuthor {
+  id: string;
+  displayName: string;
+  profileImageUrl?: string;
+  isVerified: boolean;
+  verificationBadge?: string | null;
+  location?: string;
+}
+
+interface Post {
+  id: number;
+  authorId: string;
+  type: string;
+  title?: string;
+  content: string;
+  imageUrl?: string;
+  pollOptions?: any;
+  tags?: string[];
+  isAnonymous: boolean;
+  upvotes: number;
+  downvotes: number;
+  commentCount: number;
+  createdAt: string;
+  author: PostAuthor | null;
+}
+
 export default function Home() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
@@ -25,21 +51,26 @@ export default function Home() {
     return <div>Please sign in to continue</div>;
   }
 
-  const { data: posts, isLoading: postsLoading, error } = useQuery({
+  const { data: posts, isLoading: postsLoading, error } = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     enabled: !!user,
     retry: false,
   });
 
+  useEffect(() => {
+    if (error && isUnauthorizedError(error as Error)) {
+      toast({
+        title: "Unauthorized",
+        description: "You are logged out. Logging in again...",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+    }
+  }, [error, toast]);
+
   if (error && isUnauthorizedError(error as Error)) {
-    toast({
-      title: "Unauthorized",
-      description: "You are logged out. Logging in again...",
-      variant: "destructive",
-    });
-    setTimeout(() => {
-      window.location.href = "/api/login";
-    }, 500);
     return null;
   }
 
@@ -216,7 +247,7 @@ export default function Home() {
           <p className="text-gray-500 mt-2">Loading posts...</p>
         </div>
       ) : posts && posts.length > 0 ? (
-        posts.map((post: any) => (
+        posts.map((post: Post) => (
           <PostCard key={post.id} post={post} />
         ))
       ) : (
