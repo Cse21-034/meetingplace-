@@ -15,7 +15,8 @@ import {
   Bookmark, 
   Share,
   MoreHorizontal,
-  HelpCircle
+  HelpCircle,
+  Image as ImageIcon
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -54,6 +55,16 @@ export default function PostCard({ post }: PostCardProps) {
   const queryClient = useQueryClient();
   const [isCommentSheetOpen, setIsCommentSheetOpen] = useState(false);
   const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(null);
+  const [imageError, setImageError] = useState(false);
+
+  // DEBUG: Log post data to see what's happening
+  console.log('PostCard rendering:', {
+    postId: post.id,
+    type: post.type,
+    imageUrl: post.imageUrl,
+    hasImage: post.imageUrl && post.imageUrl.trim() !== '',
+    content: post.content.substring(0, 50) + '...'
+  });
 
   const voteMutation = useMutation({
     mutationFn: async ({ type }: { type: 'upvote' | 'downvote' }) => {
@@ -161,6 +172,11 @@ export default function PostCard({ post }: PostCardProps) {
     }
   };
 
+  const handleImageError = () => {
+    console.log('Image failed to load:', post.imageUrl);
+    setImageError(true);
+  };
+
   const getBadgeColor = (badge: string) => {
     switch (badge) {
       case 'elder':
@@ -239,9 +255,49 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
+  // Improved image rendering with fallbacks
+  const renderImage = () => {
+    if (!post.imageUrl || post.imageUrl.trim() === '') {
+      return null;
+    }
+
+    // Test if the image URL is valid
+    const isValidImageUrl = post.imageUrl && (
+      post.imageUrl.startsWith('http') || 
+      post.imageUrl.startsWith('/') ||
+      post.imageUrl.startsWith('data:image')
+    );
+
+    if (!isValidImageUrl) {
+      console.log('Invalid image URL:', post.imageUrl);
+      return null;
+    }
+
+    return (
+      <div className="relative">
+        <img
+          src={post.imageUrl}
+          alt="Post image"
+          className="w-full h-64 object-cover rounded-lg"
+          onError={handleImageError}
+          onLoad={() => {
+            console.log('Image loaded successfully:', post.imageUrl);
+            setImageError(false);
+          }}
+        />
+        {imageError && (
+          <div className="absolute inset-0 bg-gray-100 rounded-lg flex flex-col items-center justify-center">
+            <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
+            <p className="text-gray-500 text-sm">Failed to load image</p>
+            <p className="text-gray-400 text-xs mt-1">URL: {post.imageUrl?.substring(0, 50)}...</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderPostContent = () => {
-    // Always show image if available, regardless of post type
-    const hasImage = post.imageUrl && post.imageUrl.trim() !== '';
+    const hasImage = post.imageUrl && post.imageUrl.trim() !== '' && !imageError;
     
     switch (post.type) {
       case 'poll':
@@ -259,13 +315,7 @@ export default function PostCard({ post }: PostCardProps) {
             <p className="text-neutral leading-relaxed">{post.content}</p>
             
             {/* Show image if available */}
-            {hasImage && (
-              <img
-                src={post.imageUrl}
-                alt="Post image"
-                className="w-full h-64 object-cover rounded-lg"
-              />
-            )}
+            {hasImage && renderImage()}
             
             <div className="space-y-2">
               {pollOptions.map((option: any, index: number) => (
@@ -303,13 +353,7 @@ export default function PostCard({ post }: PostCardProps) {
             </div>
             
             {/* Show image if available */}
-            {hasImage && (
-              <img
-                src={post.imageUrl}
-                alt="Post image"
-                className="w-full h-64 object-cover rounded-lg"
-              />
-            )}
+            {hasImage && renderImage()}
           </div>
         );
 
@@ -317,12 +361,11 @@ export default function PostCard({ post }: PostCardProps) {
         return (
           <div className="space-y-3">
             <p className="text-neutral leading-relaxed">{post.content}</p>
-            {hasImage && (
-              <img
-                src={post.imageUrl}
-                alt="Post image"
-                className="w-full h-64 object-cover rounded-lg"
-              />
+            {hasImage ? renderImage() : (
+              <div className="w-full h-64 bg-gray-100 rounded-lg flex flex-col items-center justify-center">
+                <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
+                <p className="text-gray-500">No image available</p>
+              </div>
             )}
           </div>
         );
@@ -335,13 +378,7 @@ export default function PostCard({ post }: PostCardProps) {
             <p className="text-neutral leading-relaxed">{post.content}</p>
             
             {/* Show image if available for any post type */}
-            {hasImage && (
-              <img
-                src={post.imageUrl}
-                alt="Post image"
-                className="w-full h-64 object-cover rounded-lg"
-              />
-            )}
+            {hasImage && renderImage()}
           </div>
         )
     }
