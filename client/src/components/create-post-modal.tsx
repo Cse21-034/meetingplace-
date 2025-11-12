@@ -20,7 +20,8 @@ import {
   X, 
   Plus,
   Save,
-  Send
+  Send,
+  Upload
 } from "lucide-react";
 
 interface CreatePostModalProps {
@@ -59,6 +60,7 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
   const [allowComments, setAllowComments] = useState(true);
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const texts = {
     en: {
@@ -74,6 +76,9 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
       addOption: 'Add Option',
       questionPlaceholder: 'Ask your question here...',
       titlePlaceholder: 'Enter a title for your post...',
+      uploadImage: 'Upload Image',
+      imagePlaceholder: 'Choose an image file...',
+      removeImage: 'Remove Image',
     },
     tn: {
       title: 'Dira Poso',
@@ -88,17 +93,46 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
       addOption: 'Tsenya Kgetho',
       questionPlaceholder: 'Botsa potso ya gago fano...',
       titlePlaceholder: 'Tsenya setlhogo sa poso ya gago...',
+      uploadImage: 'Tsenya Setshwantsho',
+      imagePlaceholder: 'Kgetha faele ya setshwantsho...',
+      removeImage: 'Tlosa Setshwantsho',
     },
   };
 
   const t = texts[language];
 
+  // FIXED: Updated mutation to handle image upload
   const createPostMutation = useMutation({
     mutationFn: async (postData: any) => {
+      // If there's an image file, upload it first
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        
+        try {
+          const uploadResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (!uploadResponse.ok) {
+            throw new Error('Failed to upload image');
+          }
+          
+          const uploadResult = await uploadResponse.json();
+          postData.imageUrl = uploadResult.imageUrl;
+        } catch (error) {
+          console.error('Image upload error:', error);
+          throw new Error('Failed to upload image');
+        }
+      }
+      
+      // Create the post with the image URL
       await apiRequest("POST", "/api/posts", postData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
       toast({
         title: language === 'en' ? "Success" : "Katlego",
         description: language === 'en' ? "Post created successfully!" : "Poso e dirilwe ka katlego!",
@@ -136,6 +170,47 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
     setAllowComments(true);
     setPollOptions(['', '']);
     setImageFile(null);
+    setImagePreview(null);
+  };
+
+  // FIXED: Handle image file selection with preview
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: language === 'en' ? 'Invalid file' : 'Faele e siyo',
+          description: language === 'en' ? 'Please select an image file' : 'Ka kopo kgetha faele ya seswantšho',
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: language === 'en' ? 'File too large' : 'Faele e kgolo go feta',
+          description: language === 'en' ? 'Please select an image smaller than 5MB' : 'Ka kopo kgetha seswantšho se se botlana ko 5MB',
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setImageFile(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
   };
 
   const handleSubmit = () => {
@@ -143,6 +218,16 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
       toast({
         title: language === 'en' ? "Error" : "Phoso",
         description: language === 'en' ? "Please enter some content" : "Tsweetswee tsenya diteng",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For image posts, require an image
+    if (postType === 'image' && !imageFile) {
+      toast({
+        title: language === 'en' ? "Error" : "Phoso",
+        description: language === 'en' ? "Please select an image for your post" : "Ka kopo kgetha setshwantsho mabapi le poso ya gago",
         variant: "destructive",
       });
       return;
@@ -170,6 +255,7 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
       postData.pollOptions = validOptions.map(option => ({ text: option, votes: 0 }));
     }
 
+    // Image will be handled in the mutation function
     createPostMutation.mutate(postData);
   };
 
@@ -228,6 +314,7 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
     </div>
   );
 
+  // FIXED: Updated image editor with preview
   const renderContentEditor = () => {
     switch (postType) {
       case 'question':
@@ -314,14 +401,44 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
         return (
           <div className="space-y-4">
             <div>
-              <Label htmlFor="image">{language === 'en' ? 'Upload Image' : 'Tsenya Setshwantsho'}</Label>
-              <Input
-                id="image"
-                type="file"
-                accept="image/*"
-                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-                className="mt-1"
-              />
+              <Label htmlFor="image">{t.uploadImage}</Label>
+              {!imagePreview ? (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center mt-1">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600 mb-2">{t.imagePlaceholder}</p>
+                  <Input
+                    id="image"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('image')?.click()}
+                  >
+                    {t.uploadImage}
+                  </Button>
+                </div>
+              ) : (
+                <div className="relative mt-1">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="w-full h-48 object-cover rounded-lg"
+                  />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={removeImage}
+                    className="absolute top-2 right-2"
+                  >
+                    <X size={16} />
+                    {t.removeImage}
+                  </Button>
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="content">{language === 'en' ? 'Caption' : 'Tlhaloso'}</Label>
@@ -448,7 +565,7 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={createPostMutation.isPending || !content.trim()}
+              disabled={createPostMutation.isPending || !content.trim() || (postType === 'image' && !imageFile)}
               className="flex-1 bg-primary hover:bg-blue-600"
             >
               <Send size={16} className="mr-1" />
