@@ -16,6 +16,24 @@ interface CommentSheetProps {
   postId: number;
 }
 
+// Define structure for a single comment fetched from the API
+interface CommentData {
+  id: number;
+  postId: number;
+  authorId: string;
+  parentId: number | null;
+  content: string;
+  upvotes: number;
+  createdAt: string;
+  author: {
+    id: string;
+    displayName: string;
+    profileImageUrl: string;
+    isVerified: boolean;
+    verificationBadge?: string | null;
+  } | null;
+}
+
 export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -23,7 +41,8 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   const [newComment, setNewComment] = useState("");
   const [replyToId, setReplyToId] = useState<number | null>(null);
 
-  const { data: comments, isLoading, error } = useQuery({
+  // Fetch real data. The response is an array of flat comments including author data.
+  const { data: fetchedComments, isLoading, error } = useQuery<CommentData[]>({
     queryKey: ["/api/posts", postId, "comments"],
     enabled: isOpen,
     retry: false,
@@ -31,12 +50,14 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
 
   const createCommentMutation = useMutation({
     mutationFn: async ({ content, parentId }: { content: string; parentId?: number }) => {
+      // API endpoint is correctly POST /api/posts/:id/comments
       await apiRequest("POST", `/api/posts/${postId}/comments`, {
         content,
         parentId,
       });
     },
     onSuccess: () => {
+      // Invalidate queries to refetch the list and update the main post's comment count
       queryClient.invalidateQueries({ queryKey: ["/api/posts", postId, "comments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
       setNewComment("");
@@ -76,6 +97,7 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
 
     createCommentMutation.mutate({
       content: newComment,
+      postId: postId,
       parentId: replyToId || undefined,
     });
   };
@@ -89,9 +111,10 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
   };
 
   if (error && isUnauthorizedError(error as Error)) {
+    // If auth fails, navigate user back to login/landing
     toast({
       title: "Unauthorized",
-      description: "You are logged out. Logging in again...",
+      description: "Session expired. Logging in again...",
       variant: "destructive",
     });
     setTimeout(() => {
@@ -100,75 +123,69 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
     return null;
   }
 
-  // Mock comments data for display
-  const mockComments = [
-    {
-      id: 1,
-      content: "Yes! My grandmother always said to watch the behavior of cattle and birds. They know when the rains are coming! 🐄🐦",
-      author: {
-        name: "Dineo Mogwe",
-        avatar: "https://ui-avatars.com/api/?name=Dineo+Mogwe&size=32",
-      },
-      upvotes: 5,
-      createdAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-      parentId: null,
-    },
-    {
-      id: 2,
-      content: "@Dineo Mogwe That's fascinating! Could you share more about these traditional signs? I'd love to learn more about our ancestral wisdom.",
-      author: {
-        name: "Kagiso Molefe",
-        avatar: "https://ui-avatars.com/api/?name=Kagiso+Molefe&size=32",
-      },
-      upvotes: 2,
-      createdAt: new Date(Date.now() - 45 * 60 * 1000), // 45 minutes ago
-      parentId: 1,
-    },
-  ];
-
-  const renderComment = (comment: any, isReply = false) => (
-    <div key={comment.id} className={`flex space-x-3 ${isReply ? 'ml-8' : ''}`}>
-      <img
-        src={comment.author.avatar}
-        alt={comment.author.name}
-        className="w-8 h-8 rounded-full object-cover"
-      />
-      <div className="flex-1">
-        <div className="flex items-center space-x-2">
-          <h4 className="text-sm font-medium text-neutral">{comment.author.name}</h4>
-          <span className="text-xs text-gray-500">
-            {formatDistanceToNow(comment.createdAt, { addSuffix: true })}
-          </span>
-        </div>
-        <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
-        <div className="flex items-center space-x-4 mt-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex items-center space-x-1 text-gray-500 hover:text-primary h-8 px-2"
-          >
-            <ThumbsUp size={12} />
-            <span className="text-xs">{comment.upvotes}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleReply(comment.id)}
-            className="text-xs text-gray-500 hover:text-neutral h-8 px-2"
-          >
-            Reply
-          </Button>
+  const renderComment = (comment: CommentData, isReply = false) => {
+    // Use fetched author data
+    const authorName = comment.author?.displayName || 'Anonymous';
+    const avatarUrl = comment.author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(authorName)}&size=32`;
+    
+    return (
+      <div key={comment.id} className={`flex space-x-3 ${isReply ? 'ml-8' : ''}`}>
+        <img
+          src={avatarUrl}
+          alt={authorName}
+          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center space-x-2">
+            <h4 className="text-sm font-medium text-neutral">{authorName}</h4>
+            <span className="text-xs text-gray-500">
+              {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+            </span>
+          </div>
+          <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
+          <div className="flex items-center space-x-4 mt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex items-center space-x-1 text-gray-500 hover:text-primary h-8 px-2"
+            >
+              <ThumbsUp size={12} />
+              <span className="text-xs">{comment.upvotes}</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleReply(comment.id)}
+              className="text-xs text-gray-500 hover:text-neutral h-8 px-2"
+            >
+              Reply
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+  
+  // LOGIC: Structure flat comments into a threaded list
+  const allComments: CommentData[] = fetchedComments || [];
+  
+  const topLevelComments = allComments
+    .filter((c) => c.parentId === null) // Filter top-level comments
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Sort by oldest first
+
+  const structuredComments = topLevelComments.map((c) => ({
+      ...c,
+      replies: allComments.filter((r) => r.parentId === c.id) // Attach replies
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) // Sort replies by oldest first
+  }));
+
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="bottom" className="h-[80vh] max-w-sm mx-auto">
         <SheetHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <SheetTitle>Comments</SheetTitle>
+            <SheetTitle>Comments ({allComments.length})</SheetTitle>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X size={16} />
             </Button>
@@ -181,14 +198,12 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
               <p className="text-gray-500 mt-2 text-sm">Loading comments...</p>
             </div>
-          ) : mockComments.length > 0 ? (
-            mockComments.map((comment) => (
+          ) : structuredComments.length > 0 ? (
+            structuredComments.map((comment: any) => (
               <div key={comment.id}>
                 {renderComment(comment, false)}
                 {/* Render replies */}
-                {mockComments
-                  .filter(c => c.parentId === comment.id)
-                  .map(reply => renderComment(reply, true))}
+                {comment.replies.map((reply: CommentData) => renderComment(reply, true))}
               </div>
             ))
           ) : (
@@ -204,7 +219,8 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
           {replyToId && (
             <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg mb-3">
               <span className="text-sm text-gray-600">
-                Replying to {mockComments.find(c => c.id === replyToId)?.author.name}
+                {/* Dynamically find reply target name */}
+                Replying to {allComments.find((c: CommentData) => c.id === replyToId)?.author?.displayName || 'User'}
               </span>
               <Button variant="ghost" size="sm" onClick={cancelReply}>
                 <X size={14} />
