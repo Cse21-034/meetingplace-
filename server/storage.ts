@@ -187,7 +187,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Post operations - UPDATED FOR STABILITY
+  // Post operations - REINFORCED STABILITY FIX
   async getPosts(limit = 20, offset = 0): Promise<Post[]> {
     try {
         const result = await db
@@ -210,14 +210,14 @@ export class DatabaseStorage implements IStorage {
             commentCount: posts.commentCount,
             createdAt: posts.createdAt,
             updatedAt: posts.updatedAt,
-            // Flattened Author fields
-            authorId_f: users.id, 
-            authorDisplayName: users.displayName,
-            authorProfileImageUrl: users.profileImageUrl,
-            authorIsVerified: users.isVerified,
-            authorVerificationBadge: users.verificationBadge,
-            authorLocation: users.location,
-            authorCreatedAt: users.createdAt,
+            // Flattened Author fields (aliased to avoid Drizzle's nested select issues)
+            author_id: users.id, 
+            author_displayName: users.displayName,
+            author_profileImageUrl: users.profileImageUrl,
+            author_isVerified: users.isVerified,
+            author_verificationBadge: users.verificationBadge,
+            author_location: users.location,
+            author_createdAt: users.createdAt,
           })
           .from(posts)
           .leftJoin(users, eq(posts.authorId, users.id))
@@ -227,29 +227,31 @@ export class DatabaseStorage implements IStorage {
     
         // Manually map the flattened result into the expected nested Post structure
         return result.map(row => {
-            // Only create the author object if we found an author (authorId_f exists)
-            const author = row.authorId_f ? {
-                id: row.authorId_f,
-                displayName: row.authorDisplayName,
-                profileImageUrl: row.authorProfileImageUrl,
-                isVerified: row.authorIsVerified,
-                verificationBadge: row.authorVerificationBadge,
-                location: row.authorLocation,
-                createdAt: row.authorCreatedAt,
+            // CRITICAL NULL CHECK: Use author_id to determine if a user record was found
+            const author = row.author_id ? {
+                id: row.author_id,
+                displayName: row.author_displayName || 'Anonymous User', 
+                profileImageUrl: row.author_profileImageUrl || '', 
+                isVerified: !!row.author_isVerified, 
+                verificationBadge: row.author_verificationBadge || null, 
+                location: row.author_location || '', 
+                createdAt: row.author_createdAt, 
             } : null;
 
-            // Extract post fields and assign the constructed author object
+            // Destructure using the flattened aliases
             const { 
-              authorId_f, authorDisplayName, authorProfileImageUrl, 
-              authorIsVerified, authorVerificationBadge, authorLocation, authorCreatedAt, 
+              author_id, author_displayName, author_profileImageUrl, 
+              author_isVerified, author_verificationBadge, author_location, author_createdAt, 
               ...postFields 
             } = row;
 
+            // Cast the remaining fields and manually add the constructed author object
             return { ...postFields, author } as unknown as Post;
         });
     } catch (error) {
-        // Log detailed error and rethrow for the API route to handle the 500 status
+        // Log detailed error for Render logs
         console.error("Database error fetching posts:", error);
+        // Throw a specific error that the outer Express middleware can catch and format as 500
         throw new Error("Failed to fetch posts due to a database issue.");
     }
   }
@@ -277,13 +279,13 @@ export class DatabaseStorage implements IStorage {
           createdAt: posts.createdAt,
           updatedAt: posts.updatedAt,
           // Flattened Author fields
-          authorId_f: users.id, 
-          authorDisplayName: users.displayName,
-          authorProfileImageUrl: users.profileImageUrl,
-          authorIsVerified: users.isVerified,
-          authorVerificationBadge: users.verificationBadge,
-          authorLocation: users.location,
-          authorCreatedAt: users.createdAt,
+          author_id: users.id, 
+          author_displayName: users.displayName,
+          author_profileImageUrl: users.profileImageUrl,
+          author_isVerified: users.isVerified,
+          author_verificationBadge: users.verificationBadge,
+          author_location: users.location,
+          author_createdAt: users.createdAt,
         })
         .from(posts)
         .leftJoin(users, eq(posts.authorId, users.id))
@@ -291,19 +293,19 @@ export class DatabaseStorage implements IStorage {
 
       if (!result) return undefined;
       
-      const author = result.authorId_f ? {
-          id: result.authorId_f,
-          displayName: result.authorDisplayName,
-          profileImageUrl: result.authorProfileImageUrl,
-          isVerified: result.authorIsVerified,
-          verificationBadge: result.authorVerificationBadge,
-          location: result.authorLocation,
-          createdAt: result.authorCreatedAt,
+      const author = result.author_id ? {
+          id: result.author_id,
+          displayName: result.author_displayName || 'Anonymous User',
+          profileImageUrl: result.author_profileImageUrl || '',
+          isVerified: !!result.author_isVerified,
+          verificationBadge: result.author_verificationBadge || null,
+          location: result.author_location || '',
+          createdAt: result.author_createdAt,
       } : null;
 
       const { 
-        authorId_f, authorDisplayName, authorProfileImageUrl, 
-        authorIsVerified, authorVerificationBadge, authorLocation, authorCreatedAt, 
+        author_id, author_displayName, author_profileImageUrl, 
+        author_isVerified, author_verificationBadge, author_location, author_createdAt, 
         ...postFields 
       } = result;
 
@@ -348,11 +350,11 @@ export class DatabaseStorage implements IStorage {
           createdAt: comments.createdAt,
           updatedAt: comments.updatedAt,
           // Flattened Author fields
-          authorId_f: users.id,
-          authorDisplayName: users.displayName,
-          authorProfileImageUrl: users.profileImageUrl,
-          authorIsVerified: users.isVerified,
-          authorVerificationBadge: users.verificationBadge,
+          author_id: users.id,
+          author_displayName: users.displayName,
+          author_profileImageUrl: users.profileImageUrl,
+          author_isVerified: users.isVerified,
+          author_verificationBadge: users.verificationBadge,
         })
         .from(comments)
         .leftJoin(users, eq(comments.authorId, users.id))
@@ -361,17 +363,18 @@ export class DatabaseStorage implements IStorage {
 
       // Manually map the flattened result into the expected nested Comment structure
       return result.map(row => {
-          const author = row.authorId_f ? {
-              id: row.authorId_f,
-              displayName: row.authorDisplayName,
-              profileImageUrl: row.authorProfileImageUrl,
-              isVerified: row.authorIsVerified,
-              verificationBadge: row.authorVerificationBadge,
+          // CRITICAL FIX: Ensure all author properties are explicitly checked for null/undefined
+          const author = row.author_id ? {
+              id: row.author_id,
+              displayName: row.author_displayName || 'Anonymous User',
+              profileImageUrl: row.author_profileImageUrl || '',
+              isVerified: !!row.author_isVerified,
+              verificationBadge: row.author_verificationBadge || null,
           } : null;
 
           const { 
-            authorId_f, authorDisplayName, authorProfileImageUrl, 
-            authorIsVerified, authorVerificationBadge,
+            author_id, author_displayName, author_profileImageUrl, 
+            author_isVerified, author_verificationBadge,
             ...commentFields 
           } = row;
 
