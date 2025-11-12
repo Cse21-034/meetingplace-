@@ -1,5 +1,3 @@
-// client/src/components/post-card.tsx
-
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -179,9 +177,10 @@ export default function PostCard({ post }: PostCardProps) {
     
     // Fallbacks if author data is missing or anonymous is checked
     const name = post.isAnonymous ? "Anonymous" : author?.displayName || "Kgotla User";
+    const avatarName = author?.displayName || "User";
     const avatarUrl = post.isAnonymous 
       ? `https://ui-avatars.com/api/?name=Anonymous&size=40` 
-      : author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(author?.displayName || "User")}&size=40`;
+      : author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarName)}&size=40`;
     const isVerified = author?.isVerified || false;
     const badge = author?.verificationBadge;
     
