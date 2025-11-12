@@ -53,94 +53,61 @@ import { db } from "./db";
 import { eq, desc, and, or, sql, count } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-
-  // Post operations
   getPosts(limit?: number, offset?: number): Promise<Post[]>;
   getPostById(id: number): Promise<Post | undefined>;
   createPost(post: InsertPost): Promise<Post>;
   updatePost(id: number, updates: Partial<Post>): Promise<Post>;
   deletePost(id: number): Promise<void>;
-
-  // Comment operations
   getCommentsByPostId(postId: number): Promise<Comment[]>;
   createComment(comment: InsertComment): Promise<Comment>;
   updateComment(id: number, updates: Partial<Comment>): Promise<Comment>;
   deleteComment(id: number): Promise<void>;
-
-  // Vote operations
   getVote(userId: string, postId?: number, commentId?: number): Promise<Vote | undefined>;
   createVote(vote: InsertVote): Promise<Vote>;
   updateVote(id: number, type: string): Promise<Vote>;
   deleteVote(id: number): Promise<void>;
-
-  // Bookmark operations
   getBookmarks(userId: string): Promise<Bookmark[]>;
   createBookmark(bookmark: InsertBookmark): Promise<Bookmark>;
   deleteBookmark(userId: string, postId: number): Promise<void>;
-
-  // Notification operations
   getNotifications(userId: string): Promise<Notification[]>;
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationAsRead(id: number): Promise<void>;
-
-  // Group operations
   getGroups(): Promise<Group[]>;
   getGroupById(id: number): Promise<Group | undefined>;
   createGroup(group: InsertGroup): Promise<Group>;
   joinGroup(groupId: number, userId: string): Promise<void>;
   leaveGroup(groupId: number, userId: string): Promise<void>;
-
-  // Search operations
   searchPosts(query: string, limit?: number): Promise<Post[]>;
-
-  // Monetization operations
   getSubscriptions(userId: string): Promise<Subscription[]>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: number, updates: Partial<Subscription>): Promise<Subscription>;
   cancelSubscription(id: number): Promise<void>;
-
-  // Tips operations
   getTips(userId: string): Promise<Tip[]>;
   createTip(tip: InsertTip): Promise<Tip>;
   updateTip(id: number, updates: Partial<Tip>): Promise<Tip>;
-
-  // Marketplace operations
   getMarketplaceItems(limit?: number, offset?: number): Promise<MarketplaceItem[]>;
   getMarketplaceItemById(id: number): Promise<MarketplaceItem | undefined>;
   createMarketplaceItem(item: InsertMarketplaceItem): Promise<MarketplaceItem>;
   updateMarketplaceItem(id: number, updates: Partial<MarketplaceItem>): Promise<MarketplaceItem>;
   deleteMarketplaceItem(id: number): Promise<void>;
-
-  // Sponsored content operations
   getSponsoredContent(limit?: number): Promise<SponsoredContent[]>;
   createSponsoredContent(content: InsertSponsoredContent): Promise<SponsoredContent>;
   updateSponsoredContent(id: number, updates: Partial<SponsoredContent>): Promise<SponsoredContent>;
-
-  // Wisdom transactions
   getWisdomTransactions(userId: string): Promise<WisdomTransaction[]>;
   createWisdomTransaction(transaction: InsertWisdomTransaction): Promise<WisdomTransaction>;
   updateUserWisdomPoints(userId: string, points: number): Promise<void>;
-
-  // Payment settings
   getPaymentSettings(): Promise<PaymentSetting[]>;
   updatePaymentSetting(id: number, updates: Partial<PaymentSetting>): Promise<PaymentSetting>;
   createPaymentSetting(setting: InsertPaymentSetting): Promise<PaymentSetting>;
-
-  // User payment methods
   getUserPaymentMethods(userId: string): Promise<UserPaymentMethod[]>;
   createUserPaymentMethod(method: InsertUserPaymentMethod): Promise<UserPaymentMethod>;
   updateUserPaymentMethod(id: number, updates: Partial<UserPaymentMethod>): Promise<UserPaymentMethod>;
   deleteUserPaymentMethod(id: number): Promise<void>;
-
-  // App configuration
   getAppConfig(category?: string): Promise<AppConfig[]>;
   updateAppConfig(key: string, value: string): Promise<AppConfig>;
   createAppConfig(config: InsertAppConfig): Promise<AppConfig>;
-
-  // Transactions
   getTransactions(userId: string, limit?: number): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: Partial<Transaction>): Promise<Transaction>;
@@ -220,86 +187,133 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Post operations
+  // Post operations - FIX APPLIED: Using Drizzle's nested select structure to resolve TypeError
   async getPosts(limit = 20, offset = 0): Promise<Post[]> {
-    const result = await db
-      .select({
-        // Select all post fields explicitly
-        id: posts.id,
-        authorId: posts.authorId,
-        groupId: posts.groupId,
-        type: posts.type,
-        title: posts.title,
-        content: posts.content,
-        imageUrl: posts.imageUrl,
-        linkUrl: posts.linkUrl,
-        pollOptions: posts.pollOptions,
-        tags: posts.tags,
-        isAnonymous: posts.isAnonymous,
-        allowComments: posts.allowComments,
-        upvotes: posts.upvotes,
-        downvotes: posts.downvotes,
-        commentCount: posts.commentCount,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        // Select relevant author fields into a nested 'author' object
-        author: {
-          id: users.id,
-          displayName: users.displayName,
-          profileImageUrl: users.profileImageUrl,
-          isVerified: users.isVerified,
-          verificationBadge: users.verificationBadge,
-          location: users.location,
-          createdAt: users.createdAt,
-        },
-      })
-      .from(posts)
-      .leftJoin(users, eq(posts.authorId, users.id))
-      .orderBy(desc(posts.createdAt))
-      .limit(limit)
-      .offset(offset);
+    try {
+        const result = await db
+          .select({
+            // Post fields
+            id: posts.id,
+            authorId: posts.authorId,
+            groupId: posts.groupId,
+            type: posts.type,
+            title: posts.title,
+            content: posts.content,
+            imageUrl: posts.imageUrl,
+            linkUrl: posts.linkUrl,
+            pollOptions: posts.pollOptions,
+            tags: posts.tags,
+            isAnonymous: posts.isAnonymous,
+            allowComments: posts.allowComments,
+            upvotes: posts.upvotes,
+            downvotes: posts.downvotes,
+            commentCount: posts.commentCount,
+            createdAt: posts.createdAt,
+            updatedAt: posts.updatedAt,
+            // Nested Author fields - Fixes Drizzle's internal mapping issue
+            author: {
+                id: users.id, 
+                displayName: users.displayName,
+                profileImageUrl: users.profileImageUrl,
+                isVerified: users.isVerified,
+                verificationBadge: users.verificationBadge,
+                location: users.location,
+                createdAt: users.createdAt,
+            },
+          })
+          .from(posts)
+          .leftJoin(users, eq(posts.authorId, users.id))
+          .orderBy(desc(posts.createdAt))
+          .limit(limit)
+          .offset(offset);
+    
+        // Manually map the result to handle the nullable leftJoin result
+        return result.map(row => {
+            const rawAuthor = row.author;
+            
+            // Construct the author object, handling null/undefined from leftJoin
+            const author = rawAuthor?.id ? {
+                id: rawAuthor.id,
+                displayName: rawAuthor.displayName || 'Anonymous User', 
+                profileImageUrl: rawAuthor.profileImageUrl || '', 
+                isVerified: !!rawAuthor.isVerified, 
+                verificationBadge: rawAuthor.verificationBadge || null, 
+                location: rawAuthor.location || '', 
+                createdAt: rawAuthor.createdAt, 
+            } : null;
 
-    // Cast the result to the desired type
-    return result as unknown as Post[];
+            // Separate post fields and attach the manually constructed author object
+            const { author: _, ...postFields } = row;
+
+            // Return the final Post object
+            return { ...postFields, author } as unknown as Post;
+        });
+    } catch (error) {
+        // Log detailed error for Render logs
+        console.error("Database error fetching posts:", error);
+        // Throw a specific error that the outer Express middleware can catch and format as 500
+        throw new Error("Failed to fetch posts due to a database issue.");
+    }
   }
 
   async getPostById(id: number): Promise<Post | undefined> {
-    const [result] = await db
-      .select({
-        // Select all post fields explicitly
-        id: posts.id,
-        authorId: posts.authorId,
-        groupId: posts.groupId,
-        type: posts.type,
-        title: posts.title,
-        content: posts.content,
-        imageUrl: posts.imageUrl,
-        linkUrl: posts.linkUrl,
-        pollOptions: posts.pollOptions,
-        tags: posts.tags,
-        isAnonymous: posts.isAnonymous,
-        allowComments: posts.allowComments,
-        upvotes: posts.upvotes,
-        downvotes: posts.downvotes,
-        commentCount: posts.commentCount,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        // Select relevant author fields into a nested 'author' object
-        author: {
-          id: users.id,
-          displayName: users.displayName,
-          profileImageUrl: users.profileImageUrl,
-          isVerified: users.isVerified,
-          verificationBadge: users.verificationBadge,
-          location: users.location,
-          createdAt: users.createdAt,
-        },
-      })
-      .from(posts)
-      .leftJoin(users, eq(posts.authorId, users.id))
-      .where(eq(posts.id, id));
+    try {
+      const [result] = await db
+        .select({
+          // Post fields
+          id: posts.id,
+          authorId: posts.authorId,
+          groupId: posts.groupId,
+          type: posts.type,
+          title: posts.title,
+          content: posts.content,
+          imageUrl: posts.imageUrl,
+          linkUrl: posts.linkUrl,
+          pollOptions: posts.pollOptions,
+          tags: posts.tags,
+          isAnonymous: posts.isAnonymous,
+          allowComments: posts.allowComments,
+          upvotes: posts.upvotes,
+          downvotes: posts.downvotes,
+          commentCount: posts.commentCount,
+          createdAt: posts.createdAt,
+          updatedAt: posts.updatedAt,
+          // Nested Author fields - Fixes Drizzle's internal mapping issue
+          author: {
+              id: users.id, 
+              displayName: users.displayName,
+              profileImageUrl: users.profileImageUrl,
+              isVerified: users.isVerified,
+              verificationBadge: users.verificationBadge,
+              location: users.location,
+              createdAt: users.createdAt,
+          },
+        })
+        .from(posts)
+        .leftJoin(users, eq(posts.authorId, users.id))
+        .where(eq(posts.id, id));
 
-    return result as unknown as Post | undefined;
+      if (!result) return undefined;
+      
+      const rawAuthor = result.author;
+
+      const author = rawAuthor?.id ? {
+          id: rawAuthor.id,
+          displayName: rawAuthor.displayName || 'Anonymous User',
+          profileImageUrl: rawAuthor.profileImageUrl || '',
+          isVerified: !!rawAuthor.isVerified,
+          verificationBadge: rawAuthor.verificationBadge || null,
+          location: rawAuthor.location || '',
+          createdAt: rawAuthor.createdAt,
+      } : null;
+
+      const { author: _, ...postFields } = result;
+
+      return { ...postFields, author } as unknown as Post;
+    } catch (error) {
+        console.error("Database error fetching single post:", error);
+        throw new Error("Failed to fetch post due to a database issue.");
+    }
   }
 
   async createPost(post: InsertPost): Promise<Post> {
@@ -320,36 +334,56 @@ export class DatabaseStorage implements IStorage {
     await db.delete(posts).where(eq(posts.id, id));
   }
 
-  // Comment operations
+  // Comment operations - FIX APPLIED: Using Drizzle's nested select structure to resolve TypeError
   async getCommentsByPostId(postId: number): Promise<Comment[]> {
-    const result = await db
-      .select({
-        // Select all comment fields explicitly
-        id: comments.id,
-        postId: comments.postId,
-        authorId: comments.authorId,
-        parentId: comments.parentId,
-        content: comments.content,
-        upvotes: comments.upvotes,
-        downvotes: comments.downvotes,
-        createdAt: comments.createdAt,
-        updatedAt: comments.updatedAt,
-        // Select relevant author fields into a nested 'author' object
-        author: {
-          id: users.id,
-          displayName: users.displayName,
-          profileImageUrl: users.profileImageUrl,
-          isVerified: users.isVerified,
-          verificationBadge: users.verificationBadge,
-        },
-      })
-      .from(comments)
-      .leftJoin(users, eq(comments.authorId, users.id))
-      .where(eq(comments.postId, postId))
-      .orderBy(desc(comments.createdAt));
+    try {
+      const result = await db
+        .select({
+          // Comment fields
+          id: comments.id,
+          postId: comments.postId,
+          authorId: comments.authorId,
+          parentId: comments.parentId,
+          content: comments.content,
+          upvotes: comments.upvotes,
+          downvotes: comments.downvotes,
+          createdAt: comments.createdAt,
+          updatedAt: comments.updatedAt,
+          // Nested Author fields - Fixes Drizzle's internal mapping issue
+          author: {
+            id: users.id,
+            displayName: users.displayName,
+            profileImageUrl: users.profileImageUrl,
+            isVerified: users.isVerified,
+            verificationBadge: users.verificationBadge,
+          },
+        })
+        .from(comments)
+        .leftJoin(users, eq(comments.authorId, users.id))
+        .where(eq(comments.postId, postId))
+        .orderBy(desc(comments.createdAt));
 
-    // Cast the result to the desired type
-    return result as unknown as Comment[];
+      // Manually map the result to handle the nullable leftJoin and missing fields
+      return result.map(row => {
+          const rawAuthor = row.author;
+          
+          // CRITICAL FIX: Ensure all author properties are explicitly checked for null/undefined
+          const author = rawAuthor?.id ? {
+              id: rawAuthor.id,
+              displayName: rawAuthor.displayName || 'Anonymous User',
+              profileImageUrl: rawAuthor.profileImageUrl || '',
+              isVerified: !!rawAuthor.isVerified,
+              verificationBadge: rawAuthor.verificationBadge || null,
+          } : null;
+
+          const { author: _, ...commentFields } = row;
+
+          return { ...commentFields, author } as unknown as Comment;
+      });
+    } catch (error) {
+        console.error("Database error fetching comments:", error);
+        throw new Error("Failed to fetch comments due to a database issue.");
+    }
   }
 
   async createComment(comment: InsertComment): Promise<Comment> {
@@ -582,6 +616,7 @@ export class DatabaseStorage implements IStorage {
 
   // Search operations
   async searchPosts(query: string, limit = 20): Promise<Post[]> {
+    // This function returns the original Post type which is fine. The client relies on post fields not nested objects for search.
     return await db
       .select()
       .from(posts)
