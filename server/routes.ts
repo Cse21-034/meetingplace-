@@ -5,7 +5,6 @@ import { storage } from "./storage";
 import { setupFirebaseAuth, verifyFirebaseToken } from "./firebaseAuth";
 import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
-import { setupUploadRoutes } from "./routes/upload";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint for monitoring and deployment platforms
@@ -20,7 +19,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup Firebase authentication only
   setupFirebaseAuth(app);
-  setupUploadRoutes(app);
+  
+  // Simple image upload endpoint using base64 (NO MULTER)
+  app.post('/api/upload', verifyFirebaseToken, async (req: any, res) => {
+    try {
+      const { imageData, fileName } = req.body;
+
+      if (!imageData) {
+        return res.status(400).json({ message: 'No image data provided' });
+      }
+
+      // Validate that it's a base64 image
+      if (!imageData.startsWith('data:image/')) {
+        return res.status(400).json({ message: 'Invalid image format' });
+      }
+
+      // Return the base64 data as the imageUrl
+      const imageUrl = imageData;
+
+      res.json({ 
+        success: true, 
+        imageUrl,
+        message: 'Image uploaded successfully'
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      res.status(500).json({ message: 'Failed to upload image' });
+    }
+  });
+
+  // Enhanced post creation with image support
+  app.post('/api/posts-with-image', verifyFirebaseToken, async (req: any, res) => {
+    try {
+      if (!req.firebaseUser) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+      const userId = req.firebaseUser.uid;
+      
+      const { type, content, title, tags, isAnonymous, allowComments, pollOptions, imageData } = req.body;
+
+      // Validate required fields
+      if (!content || !content.trim()) {
+        return res.status(400).json({ message: 'Content is required' });
+      }
+
+      // For image posts, validate image data
+      if (type === 'image' && (!imageData || !imageData.startsWith('data:image/'))) {
+        return res.status(400).json({ message: 'Valid image is required for image posts' });
+      }
+
+      // Prepare post data
+      const postData: any = {
+        type,
+        content: content.trim(),
+        authorId: userId,
+        isAnonymous: isAnonymous || false,
+        allowComments: allowComments !== false,
+      };
+
+      if (title && title.trim()) {
+        postData.title = title.trim();
+      }
+
+      if (tags && Array.isArray(tags)) {
+        postData.tags = tags;
+      }
+
+      if (type === 'poll' && Array.isArray(pollOptions)) {
+        const validOptions = pollOptions.filter(opt => opt && opt.text && opt.text.trim());
+        if (validOptions.length < 2) {
+          return res.status(400).json({ message: 'At least 2 poll options are required' });
+        }
+        postData.pollOptions = validOptions;
+      }
+
+      // Add image URL if provided
+      if (imageData && imageData.startsWith('data:image/')) {
+        postData.imageUrl = imageData;
+      }
+
+      // Validate with schema
+      const validation = insertPostSchema.safeParse(postData);
+      
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid post data",
+          errors: fromZodError(validation.error).toString()
+        });
+      }
+
+      const post = await storage.createPost(validation.data);
+      
+      // Fetch author data for response
+      const author = await storage.getUser(userId);
+      const postWithAuthor = {
+        ...post,
+        author: author ? {
+          id: author.id,
+          displayName: author.displayName || author.firstName || 'Anonymous',
+          profileImageUrl: author.profileImageUrl,
+          isVerified: author.isVerified,
+          verificationBadge: author.verificationBadge,
+          location: author.location
+        } : null
+      };
+      
+      res.json(postWithAuthor);
+    } catch (error) {
+      console.error("Error creating post with image:", error);
+      res.status(500).json({ message: "Failed to create post" });
+    }
+  });
   
   // Seed database with sample data in development
   if (process.env.NODE_ENV === 'development') {
@@ -44,7 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // NEW: Posts with authors endpoint - FIXED
+  // Posts with authors endpoint
   app.get('/api/posts-with-authors', async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
