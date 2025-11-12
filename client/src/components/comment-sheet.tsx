@@ -77,7 +77,7 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
       }
       toast({
         title: "Error",
-        description: error.message || "Failed to post comment",
+        description: "Failed to post comment",
         variant: "destructive",
       });
     },
