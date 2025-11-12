@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { setupFirebaseAuth, verifyFirebaseToken } from "./firebaseAuth";
 import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { setupUploadRoutes } from "./routes/upload";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint for monitoring and deployment platforms
@@ -19,6 +20,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup Firebase authentication only
   setupFirebaseAuth(app);
+  setupUploadRoutes(app);
   
   // Seed database with sample data in development
   if (process.env.NODE_ENV === 'development') {
