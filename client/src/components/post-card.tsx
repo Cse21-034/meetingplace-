@@ -1,5 +1,3 @@
-// client/src/components/post-card.tsx
-
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -21,6 +19,16 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
+interface PostAuthor {
+  id: string;
+  displayName: string;
+  profileImageUrl?: string;
+  isVerified: boolean;
+  verificationBadge?: string | null;
+  location?: string;
+  createdAt?: string;
+}
+
 interface PostCardProps {
   post: {
     id: number;
@@ -36,16 +44,7 @@ interface PostCardProps {
     downvotes: number;
     commentCount: number;
     createdAt: string;
-    // Updated to expect nested author object from the API
-    author: { 
-        id: string;
-        displayName: string;
-        profileImageUrl: string;
-        isVerified: boolean;
-        verificationBadge?: string | null;
-        location?: string;
-        createdAt?: string;
-    } | null;
+    author: PostAuthor | null;
   };
 }
 
@@ -62,6 +61,7 @@ export default function PostCard({ post }: PostCardProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
@@ -175,38 +175,55 @@ export default function PostCard({ post }: PostCardProps) {
   };
   
   const getVerificationBadge = () => {
+    // Handle anonymous posts
+    if (post.isAnonymous) {
+      return (
+        <div className="flex items-start space-x-3">
+          <img
+            src="https://ui-avatars.com/api/?name=Anonymous&size=40"
+            alt="Anonymous"
+            className="w-10 h-10 rounded-full object-cover"
+          />
+          <div className="flex-1">
+            <div className="flex items-center space-x-2">
+              <h3 className="font-medium text-neutral">Anonymous</h3>
+            </div>
+            <p className="text-sm text-gray-500">
+              {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
+            <MoreHorizontal size={16} />
+          </Button>
+        </div>
+      );
+    }
+
+    // Handle posts with actual authors
     const author = post.author;
-    
-    // Fallbacks if author data is missing or anonymous is checked
-    const name = post.isAnonymous ? "Anonymous" : author?.displayName || "Kgotla User";
-    const avatarUrl = post.isAnonymous 
-      ? `https://ui-avatars.com/api/?name=Anonymous&size=40` 
-      : author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(author?.displayName || "User")}&size=40`;
+    const name = author?.displayName || "Kgotla User";
+    const avatarUrl = author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=40`;
     const isVerified = author?.isVerified || false;
     const badge = author?.verificationBadge;
-    
-    // Use fetched location if available
-    const location = author?.location || "Online"; 
-    
+    const location = author?.location || "Online";
+
     return (
       <div className="flex items-start space-x-3">
         <img
           src={avatarUrl}
-          alt="User avatar"
+          alt={name}
           className="w-10 h-10 rounded-full object-cover"
         />
         <div className="flex-1">
           <div className="flex items-center space-x-2">
             <h3 className="font-medium text-neutral">{name}</h3>
-            {/* Show verified icon and badge only if not anonymous */}
-            {isVerified && !post.isAnonymous && (
+            {isVerified && (
               <div className="w-4 h-4 bg-cultural rounded-full flex items-center justify-center">
                 <span className="text-white text-xs">✓</span>
               </div>
             )}
-            {badge && !post.isAnonymous && (
+            {badge && (
               <Badge variant="secondary" className={`text-xs ${getBadgeColor(badge)}`}>
-                {/* Capitalize first letter */}
                 {badge.charAt(0).toUpperCase() + badge.slice(1)}
               </Badge>
             )}
@@ -223,6 +240,9 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const renderPostContent = () => {
+    // Always show image if available, regardless of post type
+    const hasImage = post.imageUrl && post.imageUrl.trim() !== '';
+    
     switch (post.type) {
       case 'poll':
         const pollOptions = post.pollOptions || [
@@ -231,13 +251,22 @@ export default function PostCard({ post }: PostCardProps) {
           { text: "Cultural preservation activities", votes: 23 },
         ];
         
-        // Mock votes count for display purpose, replace with real logic if implemented
         const totalVotes = pollOptions.reduce((sum: number, option: any) => sum + option.votes, 0);
 
         return (
           <div className="space-y-3">
             {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
             <p className="text-neutral leading-relaxed">{post.content}</p>
+            
+            {/* Show image if available */}
+            {hasImage && (
+              <img
+                src={post.imageUrl}
+                alt="Post image"
+                className="w-full h-64 object-cover rounded-lg"
+              />
+            )}
+            
             <div className="space-y-2">
               {pollOptions.map((option: any, index: number) => (
                 <div
@@ -272,6 +301,15 @@ export default function PostCard({ post }: PostCardProps) {
               {post.title && <h4 className="font-semibold text-lg text-neutral mb-1">{post.title}</h4>}
               <p className="text-neutral leading-relaxed">{post.content}</p>
             </div>
+            
+            {/* Show image if available */}
+            {hasImage && (
+              <img
+                src={post.imageUrl}
+                alt="Post image"
+                className="w-full h-64 object-cover rounded-lg"
+              />
+            )}
           </div>
         );
 
@@ -279,7 +317,7 @@ export default function PostCard({ post }: PostCardProps) {
         return (
           <div className="space-y-3">
             <p className="text-neutral leading-relaxed">{post.content}</p>
-            {post.imageUrl && (
+            {hasImage && (
               <img
                 src={post.imageUrl}
                 alt="Post image"
@@ -290,11 +328,20 @@ export default function PostCard({ post }: PostCardProps) {
         );
 
       default:
-        // Text post
+        // Text post - but show image if available
         return (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
             <p className="text-neutral leading-relaxed">{post.content}</p>
+            
+            {/* Show image if available for any post type */}
+            {hasImage && (
+              <img
+                src={post.imageUrl}
+                alt="Post image"
+                className="w-full h-64 object-cover rounded-lg"
+              />
+            )}
           </div>
         )
     }
@@ -315,10 +362,8 @@ export default function PostCard({ post }: PostCardProps) {
             
             {post.tags && post.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
-                {/* Ensure tags is an array of strings before mapping */}
                 {Array.isArray(post.tags) && post.tags.map((tag, index) => (
                   <Badge key={index} variant="secondary" className="text-xs">
-                    {/* Format tag with # if it doesn't already have one */}
                     {tag.startsWith('#') ? tag : `#${tag}`}
                   </Badge>
                 ))}
