@@ -1,5 +1,3 @@
-// client/src/components/comment-sheet.tsx
-
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -79,7 +77,7 @@ export default function CommentSheet({ isOpen, onClose, postId }: CommentSheetPr
       }
       toast({
         title: "Error",
-        description: "Failed to post comment",
+        description: error.message || "Failed to post comment",
         variant: "destructive",
       });
     },
