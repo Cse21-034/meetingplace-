@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-// Removed Replit Auth - using Firebase only
 import { setupFirebaseAuth, verifyFirebaseToken } from "./firebaseAuth";
 import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
@@ -43,13 +42,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Post routes
+  // NEW: Posts with authors endpoint - FIXED
+  app.get('/api/posts-with-authors', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const posts = await storage.getPosts(limit, offset);
+      
+      // Fetch author data for each post
+      const postsWithAuthors = await Promise.all(
+        posts.map(async (post) => {
+          const author = post.authorId ? await storage.getUser(post.authorId) : null;
+          return {
+            ...post,
+            author: author ? {
+              id: author.id,
+              displayName: author.displayName || author.firstName || 'Anonymous',
+              profileImageUrl: author.profileImageUrl,
+              isVerified: author.isVerified,
+              verificationBadge: author.verificationBadge,
+              location: author.location
+            } : null
+          };
+        })
+      );
+      
+      res.json(postsWithAuthors);
+    } catch (error) {
+      console.error("Error fetching posts with authors:", error);
+      res.status(500).json({ message: "Failed to fetch posts" });
+    }
+  });
+
+  // Post routes - UPDATED to include author data
   app.get('/api/posts', async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
       const offset = parseInt(req.query.offset as string) || 0;
       const posts = await storage.getPosts(limit, offset);
-      res.json(posts);
+      
+      // Fetch author data for each post
+      const postsWithAuthors = await Promise.all(
+        posts.map(async (post) => {
+          const author = post.authorId ? await storage.getUser(post.authorId) : null;
+          return {
+            ...post,
+            author: author ? {
+              id: author.id,
+              displayName: author.displayName || author.firstName || 'Anonymous',
+              profileImageUrl: author.profileImageUrl,
+              isVerified: author.isVerified,
+              verificationBadge: author.verificationBadge,
+              location: author.location
+            } : null
+          };
+        })
+      );
+      
+      res.json(postsWithAuthors);
     } catch (error) {
       console.error("Error fetching posts:", error);
       res.status(500).json({ message: "Failed to fetch posts" });
@@ -63,7 +113,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!post) {
         return res.status(404).json({ message: "Post not found" });
       }
-      res.json(post);
+      
+      // Fetch author data
+      const author = post.authorId ? await storage.getUser(post.authorId) : null;
+      const postWithAuthor = {
+        ...post,
+        author: author ? {
+          id: author.id,
+          displayName: author.displayName || author.firstName || 'Anonymous',
+          profileImageUrl: author.profileImageUrl,
+          isVerified: author.isVerified,
+          verificationBadge: author.verificationBadge,
+          location: author.location
+        } : null
+      };
+      
+      res.json(postWithAuthor);
     } catch (error) {
       console.error("Error fetching post:", error);
       res.status(500).json({ message: "Failed to fetch post" });
@@ -72,9 +137,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/posts', verifyFirebaseToken, async (req: any, res) => {
     try {
-      if (!req.firebaseUser) {
-        return res.status(401).json({ message: 'Authentication required' });
-      }
       if (!req.firebaseUser) {
         return res.status(401).json({ message: 'Authentication required' });
       }
@@ -89,7 +151,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const post = await storage.createPost(validation.data);
-      res.json(post);
+      
+      // Fetch author data for response
+      const author = await storage.getUser(userId);
+      const postWithAuthor = {
+        ...post,
+        author: author ? {
+          id: author.id,
+          displayName: author.displayName || author.firstName || 'Anonymous',
+          profileImageUrl: author.profileImageUrl,
+          isVerified: author.isVerified,
+          verificationBadge: author.verificationBadge,
+          location: author.location
+        } : null
+      };
+      
+      res.json(postWithAuthor);
     } catch (error) {
       console.error("Error creating post:", error);
       res.status(500).json({ message: "Failed to create post" });
@@ -114,7 +191,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const post = await storage.updatePost(id, req.body);
-      res.json(post);
+      
+      // Fetch author data for response
+      const author = await storage.getUser(userId);
+      const postWithAuthor = {
+        ...post,
+        author: author ? {
+          id: author.id,
+          displayName: author.displayName || author.firstName || 'Anonymous',
+          profileImageUrl: author.profileImageUrl,
+          isVerified: author.isVerified,
+          verificationBadge: author.verificationBadge,
+          location: author.location
+        } : null
+      };
+      
+      res.json(postWithAuthor);
     } catch (error) {
       console.error("Error updating post:", error);
       res.status(500).json({ message: "Failed to update post" });
@@ -127,9 +219,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: 'Authentication required' });
       }
       const id = parseInt(req.params.id);
-      if (!req.firebaseUser) {
-        return res.status(401).json({ message: 'Authentication required' });
-      }
       const userId = req.firebaseUser.uid;
       
       const existingPost = await storage.getPostById(id);
@@ -149,12 +238,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Comment routes
+  // Comment routes - UPDATED to include author data
   app.get('/api/posts/:id/comments', async (req, res) => {
     try {
       const postId = parseInt(req.params.id);
       const comments = await storage.getCommentsByPostId(postId);
-      res.json(comments);
+      
+      // Fetch author data for each comment
+      const commentsWithAuthors = await Promise.all(
+        comments.map(async (comment) => {
+          const author = comment.authorId ? await storage.getUser(comment.authorId) : null;
+          return {
+            ...comment,
+            author: author ? {
+              id: author.id,
+              displayName: author.displayName || author.firstName || 'Anonymous',
+              profileImageUrl: author.profileImageUrl,
+              isVerified: author.isVerified,
+              verificationBadge: author.verificationBadge
+            } : null
+          };
+        })
+      );
+      
+      res.json(commentsWithAuthors);
     } catch (error) {
       console.error("Error fetching comments:", error);
       res.status(500).json({ message: "Failed to fetch comments" });
@@ -183,7 +290,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const comment = await storage.createComment(validation.data);
-      res.json(comment);
+      
+      // Fetch author data for response
+      const author = await storage.getUser(userId);
+      const commentWithAuthor = {
+        ...comment,
+        author: author ? {
+          id: author.id,
+          displayName: author.displayName || author.firstName || 'Anonymous',
+          profileImageUrl: author.profileImageUrl,
+          isVerified: author.isVerified,
+          verificationBadge: author.verificationBadge
+        } : null
+      };
+      
+      res.json(commentWithAuthor);
     } catch (error) {
       console.error("Error creating comment:", error);
       res.status(500).json({ message: "Failed to create comment" });
@@ -352,22 +473,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Search routes
-  app.get('/api/search', async (req, res) => {
-    try {
-      const query = req.query.q as string;
-      if (!query) {
-        return res.status(400).json({ message: "Query parameter is required" });
-      }
-
-      const posts = await storage.searchPosts(query);
-      res.json(posts);
-    } catch (error) {
-      console.error("Error searching posts:", error);
-      res.status(500).json({ message: "Failed to search posts" });
-    }
-  });
-
   // Payment settings routes
   app.get('/api/payment-settings', async (req, res) => {
     try {
@@ -465,86 +570,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/tips', verifyFirebaseToken, async (req: any, res) => {
     try {
       const userId = req.firebaseUser?.uid;
-      const tip = await storage.createTip({
-        ...req.body,
-        fromUserId: userId
-      });
-      res.json(tip);
-    } catch (error) {
-      console.error('Error creating tip:', error);
-      res.status(500).json({ message: 'Failed to create tip' });
-    }
-  });
-
-  // Marketplace routes
-  app.get('/api/marketplace', async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 20;
-      const offset = parseInt(req.query.offset as string) || 0;
-      const items = await storage.getMarketplaceItems(limit, offset);
-      res.json(items);
-    } catch (error) {
-      console.error('Error fetching marketplace items:', error);
-      res.status(500).json({ message: 'Failed to fetch marketplace items' });
-    }
-  });
-
-  app.post('/api/marketplace', verifyFirebaseToken, async (req: any, res) => {
-    try {
-      const userId = req.firebaseUser?.uid;
-      const item = await storage.createMarketplaceItem({
-        ...req.body,
-        sellerId: userId
-      });
-      res.json(item);
-    } catch (error) {
-      console.error('Error creating marketplace item:', error);
-      res.status(500).json({ message: 'Failed to create marketplace item' });
-    }
-  });
-
-  // Transactions routes
-  app.get('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
-    try {
-      const userId = req.firebaseUser?.uid;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const transactions = await storage.getTransactions(userId, limit);
-      res.json(transactions);
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      res.status(500).json({ message: 'Failed to fetch transactions' });
-    }
-  });
-
-  app.post('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
-    try {
-      const userId = req.firebaseUser?.uid;
-      const transaction = await storage.createTransaction({
-        ...req.body,
-        userId
-      });
-      res.json(transaction);
-    } catch (error) {
-      console.error('Error creating transaction:', error);
-      res.status(500).json({ message: 'Failed to create transaction' });
-    }
-  });
-
-  // Tips routes
-  app.get('/api/tips', verifyFirebaseToken, async (req: any, res) => {
-    try {
-      const userId = req.firebaseUser?.uid;
-      const tips = await storage.getTips(userId);
-      res.json(tips);
-    } catch (error) {
-      console.error('Error fetching tips:', error);
-      res.status(500).json({ message: 'Failed to fetch tips' });
-    }
-  });
-
-  app.post('/api/tips', verifyFirebaseToken, async (req: any, res) => {
-    try {
-      const userId = req.firebaseUser?.uid;
       const { toUserId, postId, commentId, amount, currency, paymentMethod, message } = req.body;
 
       // Validate required fields
@@ -605,6 +630,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error creating tip:', error);
       res.status(500).json({ message: 'Failed to create tip' });
+    }
+  });
+
+  // Marketplace routes
+  app.get('/api/marketplace', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const items = await storage.getMarketplaceItems(limit, offset);
+      res.json(items);
+    } catch (error) {
+      console.error('Error fetching marketplace items:', error);
+      res.status(500).json({ message: 'Failed to fetch marketplace items' });
+    }
+  });
+
+  app.post('/api/marketplace', verifyFirebaseToken, async (req: any, res) => {
+    try {
+      const userId = req.firebaseUser?.uid;
+      const item = await storage.createMarketplaceItem({
+        ...req.body,
+        sellerId: userId
+      });
+      res.json(item);
+    } catch (error) {
+      console.error('Error creating marketplace item:', error);
+      res.status(500).json({ message: 'Failed to create marketplace item' });
+    }
+  });
+
+  // Transactions routes
+  app.get('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
+    try {
+      const userId = req.firebaseUser?.uid;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const transactions = await storage.getTransactions(userId, limit);
+      res.json(transactions);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      res.status(500).json({ message: 'Failed to fetch transactions' });
+    }
+  });
+
+  app.post('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
+    try {
+      const userId = req.firebaseUser?.uid;
+      const transaction = await storage.createTransaction({
+        ...req.body,
+        userId
+      });
+      res.json(transaction);
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      res.status(500).json({ message: 'Failed to create transaction' });
     }
   });
 
