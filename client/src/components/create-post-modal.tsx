@@ -102,63 +102,55 @@ export default function CreatePostModal({ isOpen, onClose, language }: CreatePos
   const t = texts[language];
 
   // FIXED: Updated mutation to handle image upload
-  const createPostMutation = useMutation({
-    mutationFn: async (postData: any) => {
-      // If there's an image file, upload it first
-      if (imageFile) {
-        const formData = new FormData();
-        formData.append('image', imageFile);
-        
-        try {
-          const uploadResponse = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (!uploadResponse.ok) {
-            throw new Error('Failed to upload image');
-          }
-          
-          const uploadResult = await uploadResponse.json();
-          postData.imageUrl = uploadResult.imageUrl;
-        } catch (error) {
-          console.error('Image upload error:', error);
-          throw new Error('Failed to upload image');
-        }
-      }
-      
-      // Create the post with the image URL
-      await apiRequest("POST", "/api/posts", postData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
-      toast({
-        title: language === 'en' ? "Success" : "Katlego",
-        description: language === 'en' ? "Post created successfully!" : "Poso e dirilwe ka katlego!",
+  // FIXED: Updated mutation to handle base64 image upload (NO MULTER)
+const createPostMutation = useMutation({
+  mutationFn: async (postData: any) => {
+    // If there's an image file, convert it to base64
+    if (imageFile) {
+      const base64Image = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(imageFile);
       });
-      resetForm();
-      onClose();
-    },
-    onError: (error) => {
-      if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
+      
+      // Use the new endpoint that handles base64 images
+      postData.imageData = base64Image;
+      const response = await apiRequest("POST", "/api/posts-with-image", postData);
+      return response;
+    } else {
+      // Use regular post endpoint for non-image posts
+      await apiRequest("POST", "/api/posts", postData);
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
+    toast({
+      title: language === 'en' ? "Success" : "Katlego",
+      description: language === 'en' ? "Post created successfully!" : "Poso e dirilwe ka katlego!",
+    });
+    resetForm();
+    onClose();
+  },
+  onError: (error) => {
+    if (isUnauthorizedError(error as Error)) {
       toast({
-        title: language === 'en' ? "Error" : "Phoso",
-        description: language === 'en' ? "Failed to create post" : "Go paleletswe go dira poso",
+        title: "Unauthorized",
+        description: "You are logged out. Logging in again...",
         variant: "destructive",
       });
-    },
-  });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+      return;
+    }
+    toast({
+      title: language === 'en' ? "Error" : "Phoso",
+      description: language === 'en' ? "Failed to create post" : "Go paleletswe go dira poso",
+      variant: "destructive",
+    });
+  },
+});
 
   const resetForm = () => {
     setPostType('text');
