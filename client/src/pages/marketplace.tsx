@@ -104,49 +104,45 @@ export default function Marketplace() {
     }
   });
 
-  // NEW INTERACTIVITY HANDLERS
-  const handleLike = (itemTitle: string) => {
-    if (!isAuthenticated) {
-      toast({ title: "Login Required", description: "Please log in to like items.", variant: "destructive" });
-      return;
-    }
-    toast({ title: "Item Liked (Mock)", description: `You showed appreciation for "${itemTitle}".` });
-    // In a real app, this would be a mutation call to an /api/likes endpoint
-  }
-
-  const handleContact = (sellerName: string) => {
-    if (!isAuthenticated) {
-      toast({ title: "Login Required", description: "Please log in to contact sellers.", variant: "destructive" });
-      return;
-    }
-    toast({ title: "Contact Seller (Mock)", description: `Starting chat/contact flow with ${sellerName}...` });
-    // In a real app, this would open a chat window/draft email
-  }
-
-  const handleShare = async (item: MarketplaceItem) => {
-    const shareData = {
-      title: item.title,
-      text: item.description,
-      url: `${window.location.origin}/marketplace/${item.id}`, // Mock item URL
-    };
-    
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (error) {
-        console.log("Share canceled", error);
+  // NEW: Image select handler
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Invalid file',
+          description: 'Please select an image file',
+          variant: "destructive",
+        });
+        return;
       }
-    } else {
-      // Fallback for browsers that don't support native sharing
-      navigator.clipboard.writeText(shareData.url);
-      toast({
-        title: "Link Copied",
-        description: `Link for "${item.title}" copied to clipboard.`,
-      });
+      
+      // 5MB max limit check
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: 'File too large',
+          description: 'Please select an image smaller than 5MB',
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  // END NEW INTERACTIVITY HANDLERS
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    // Reset file input
+    const fileInput = document.getElementById('image') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
 
   const createMarketplaceItem = useMutation({
     mutationFn: async (itemData: any) => 
@@ -189,46 +185,6 @@ export default function Marketplace() {
       });
     },
   });
-
-  // NEW: Image select handler
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: 'Invalid file',
-          description: 'Please select an image file',
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // 5MB max limit check
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: 'File too large',
-          description: 'Please select an image smaller than 5MB',
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const removeImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
-    // Reset file input
-    const fileInput = document.getElementById('image') as HTMLInputElement;
-    if (fileInput) fileInput.value = '';
-  };
 
   // MODIFIED: handleCreateItem to include image processing
   const handleCreateItem = async () => {
@@ -286,7 +242,7 @@ export default function Marketplace() {
                 <DialogTitle>List an Item</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                {/* IMAGE FIELD */}
+                {/* NEW IMAGE FIELD */}
                 <div>
                   <Label htmlFor="image">Image (First image is primary)</Label>
                   {!imagePreview ? (
@@ -327,7 +283,7 @@ export default function Marketplace() {
                     </div>
                   )}
                 </div>
-                {/* END IMAGE FIELD */}
+                {/* END NEW IMAGE FIELD */}
 
                 <div>
                   <Label htmlFor="title">Title</Label>
@@ -471,11 +427,7 @@ export default function Marketplace() {
                   alt={item.title}
                   className="w-full h-48 object-cover"
                 />
-                {/* FIX: Heart button is now clickable */}
-                <button 
-                  className="absolute top-2 right-2 p-2 bg-white/90 rounded-full hover:bg-white"
-                  onClick={() => handleLike(item.title)}
-                >
+                <button className="absolute top-2 right-2 p-2 bg-white/90 rounded-full hover:bg-white">
                   <Heart className="w-4 h-4" />
                 </button>
               </div>
@@ -536,21 +488,11 @@ export default function Marketplace() {
                 </div>
                 
                 <div className="flex gap-2 mt-3">
-                  {/* FIX: Contact button is now clickable */}
-                  <Button 
-                    className="flex-1" 
-                    size="sm"
-                    onClick={() => item.seller && handleContact(item.seller.name)}
-                  >
+                  <Button className="flex-1" size="sm">
                     <MessageCircle className="w-4 h-4 mr-1" />
                     Contact
                   </Button>
-                  {/* FIX: Share button is now clickable */}
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleShare(item)}
-                  >
+                  <Button variant="outline" size="sm">
                     <Share2 className="w-4 h-4" />
                   </Button>
                 </div>
