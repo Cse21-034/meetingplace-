@@ -1,3 +1,4 @@
+// client/src/pages/home.tsx
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -11,6 +12,8 @@ import { Plus, Search, Bell, Globe, Crown, Star } from "lucide-react";
 import AppMenu from "@/components/app-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import SubscriptionModal from "@/components/subscription-modal"; 
+import { useLocation } from "wouter";
 
 interface PostAuthor {
   id: string;
@@ -35,36 +38,50 @@ interface Post {
   downvotes: number;
   commentCount: number;
   createdAt: string;
-  author: PostAuthor | null;
+  author: PostAuthor | null; 
+  currentUserVote?: 'upvote' | 'downvote' | null; 
+}
+
+// Interface for Sponsored Content (relies on /api/sponsored-content route in server/routes.ts)
+interface SponsoredContent {
+  id: number;
+  title: string;
+  content: string;
+  imageUrl: string;
+  linkUrl: string;
 }
 
 export default function Home() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false); 
   const [language, setLanguage] = useState<'en' | 'tn'>('en');
+  const [, setLocation] = useLocation(); 
 
-  // Utility to get the most robust avatar URL for the logged-in user
   const getRobustAvatarUrl = () => {
-    // 1. Use the fetched profileImageUrl (from DB sync) first
-    if (user?.profileImageUrl) {
-      return user.profileImageUrl;
+    if (user?.photoURL) {
+        return user.photoURL;
     }
-    
-    // 2. Fallback to a name-based avatar using the most complete name available
-    const nameForAvatar = user?.displayName || user?.firstName || user?.email?.split('@')[0] || "User";
+    const nameForAvatar = user?.displayName || user?.email?.split('@')[0] || "User";
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForAvatar)}&size=80`;
   };
 
-  // Show landing page if not authenticated
   if (!loading && !user) {
     return <div>Please sign in to continue</div>;
   }
 
+  // Fetch real posts data (server/routes.ts is configured to enrich this with author data)
   const { data: posts, isLoading: postsLoading, error } = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     enabled: !!user,
     retry: false,
+  });
+  
+  // Fetch sponsored content
+  const { data: sponsoredItems = [] } = useQuery<SponsoredContent[]>({
+    queryKey: ["/api/sponsored-content"],
+    enabled: !!user,
   });
 
   useEffect(() => {
@@ -75,7 +92,7 @@ export default function Home() {
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
+        window.location.href = "/"; 
       }, 500);
     }
   }, [error, toast]);
@@ -87,6 +104,10 @@ export default function Home() {
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'en' ? 'tn' : 'en');
   };
+
+  const handleSearchClick = () => {
+    setLocation("/search");
+  }
 
   const header = (
     <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
@@ -109,6 +130,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
+          onClick={handleSearchClick} // FIXED: Navigate to search page
           className="text-gray-600 hover:text-primary"
         >
           <Search size={16} />
@@ -116,6 +138,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setLocation("/notifications")} // FIXED: Navigate to notifications page
           className="text-gray-600 hover:text-primary relative"
         >
           <Bell size={16} />
@@ -125,9 +148,11 @@ export default function Home() {
     </header>
   );
 
+  // MOCK STORIES REPLACED WITH STATIC PLACEHOLDERS
   const stories = user ? (
     <section className="px-4 py-3 bg-white border-b border-gray-200">
       <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
+        {/* User Story */}
         <div className="flex-shrink-0 text-center">
           <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-full p-0.5">
             <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
@@ -142,7 +167,7 @@ export default function Home() {
             {language === 'en' ? 'Your Story' : 'Pale ya gago'}
           </p>
         </div>
-        {/* Mock community stories */}
+        {/* Community Story Placeholder */}
         <div className="flex-shrink-0 text-center">
           <div className="w-16 h-16 bg-gradient-to-br from-secondary to-cultural rounded-full p-0.5">
             <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
@@ -180,8 +205,8 @@ export default function Home() {
     </section>
   ) : null;
 
-  // Premium upgrade banner for non-premium users
-  const premiumBanner = !user?.isPremium ? (
+  // FIXED: Premium upgrade banner now correctly checks user subscriptionTier
+  const premiumBanner = user?.subscriptionTier === 'free' ? (
     <section className="px-4 py-3">
       <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20">
         <CardContent className="p-4">
@@ -199,7 +224,11 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            <Button size="sm" className="flex items-center gap-2">
+            <Button 
+              size="sm" 
+              className="flex items-center gap-2"
+              onClick={() => setIsSubscriptionModalOpen(true)} // FIXED: Opens the SubscriptionModal
+            >
               <Star className="w-4 h-4" />
               {language === 'en' ? 'Upgrade' : 'Tokafatsa'}
             </Button>
@@ -209,8 +238,8 @@ export default function Home() {
     </section>
   ) : null;
 
-  // Sponsored content banner
-  const sponsoredContent = (
+  // REMOVED MOCK SPONSORED CONTENT: Using real data fetch
+  const sponsoredContent = sponsoredItems.length > 0 ? (
     <section className="px-4 py-3">
       <Card className="border-yellow-200 bg-yellow-50">
         <CardContent className="p-4">
@@ -221,29 +250,27 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3">
             <img 
-              src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=60&h=60&fit=crop&crop=center"
-              alt="Sponsored content"
+              src={sponsoredItems[0].imageUrl || "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=60&h=60&fit=crop&crop=center"}
+              alt={sponsoredItems[0].title}
               className="w-12 h-12 rounded-lg object-cover"
             />
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900">
-                {language === 'en' ? 'Support Local Artisans' : 'Thusa Baithuti ba Selegae'}
+              <h3 className="font-medium text-gray-900 line-clamp-1">
+                {sponsoredItems[0].title}
               </h3>
               <p className="text-sm text-gray-600 line-clamp-2">
-                {language === 'en' 
-                  ? 'Discover authentic handmade crafts from Southern Africa. Shop now and support our community.'
-                  : 'Bona ditiro tse di dirilweng ka matsogo go tswa Aforikaborwa. Reka gompieno o thuse setšhaba sa rona.'
-                }
+                {sponsoredItems[0].content}
               </p>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => window.open(sponsoredItems[0].linkUrl, '_blank')}>
               {language === 'en' ? 'Learn More' : 'Ithute go oketsi'}
             </Button>
           </div>
         </CardContent>
       </Card>
     </section>
-  );
+  ) : null;
+
 
   const content = (
     <div className="space-y-0">
@@ -254,7 +281,7 @@ export default function Home() {
         </div>
       ) : posts && posts.length > 0 ? (
         posts.map((post: Post) => (
-          <PostCard key={post.id} post={post} />
+          <PostCard key={post.id} post={post} /> // Uses real posts data
         ))
       ) : (
         <Card className="mx-4 mt-8">
@@ -300,6 +327,11 @@ export default function Home() {
         isOpen={isCreatePostOpen} 
         onClose={() => setIsCreatePostOpen(false)}
         language={language}
+      />
+      <SubscriptionModal 
+        trigger={null} // Modal triggered by button inside the component
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
       />
     </MobileLayout>
   );
