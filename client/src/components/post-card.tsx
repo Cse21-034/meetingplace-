@@ -1,3 +1,4 @@
+// client/src/components/post-card.tsx
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -45,7 +46,6 @@ interface PostCardProps {
     downvotes: number;
     commentCount: number;
     createdAt: string;
-    // NOTE: This field must be enriched by the API to function correctly on load
     currentUserVote?: 'upvote' | 'downvote' | null; 
     author: PostAuthor | null;
   };
@@ -57,19 +57,12 @@ export default function PostCard({ post }: PostCardProps) {
   const queryClient = useQueryClient();
   const [isCommentSheetOpen, setIsCommentSheetOpen] = useState(false);
   
-  // FIX: Initialize userVote state from the prop (provided by the API)
+  // Initialize userVote state from the prop
   const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(post.currentUserVote || null);
   const [imageError, setImageError] = useState(false);
 
-  // DEBUG: Log post data to see what's happening
-  console.log('PostCard rendering:', {
-    postId: post.id,
-    type: post.type,
-    imageUrl: post.imageUrl,
-    hasImage: post.imageUrl && post.imageUrl.trim() !== '',
-    content: post.content.substring(0, 50) + '...',
-    currentUserVote: post.currentUserVote 
-  });
+  // Calculate score directly from post props
+  const totalScore = post.upvotes - post.downvotes;
 
   const voteMutation = useMutation({
     mutationFn: async ({ type }: { type: 'upvote' | 'downvote' }) => {
@@ -77,28 +70,20 @@ export default function PostCard({ post }: PostCardProps) {
       await apiRequest("POST", "/api/votes", { postId: post.id, type });
     },
     onSuccess: (data, variables) => {
-      // FIX: Optimistically update local state for fast UI response
+      // FIXED: Optimistically update local state for faster UI response
       const newVote = userVote === variables.type ? null : variables.type;
       setUserVote(newVote); 
       
-      // FIX: Invalidate to trigger a fresh fetch and update all vote counts
+      // Invalidate to trigger a fresh fetch and update all vote counts
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts", post.id] });
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
+        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/"; }, 500);
         return;
       }
-      // FIX: Improved error message reporting the underlying issue
       toast({
         title: "Error",
         description: `Failed to vote on post. ${error instanceof Error ? error.message : ''}`,
@@ -109,57 +94,36 @@ export default function PostCard({ post }: PostCardProps) {
 
   const bookmarkMutation = useMutation({
     mutationFn: async () => {
+      // Assuming this endpoint is idempotent (handles both create and delete) or only creates
       await apiRequest("POST", "/api/bookmarks", { postId: post.id });
     },
     onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Post bookmarked successfully",
-      });
+      toast({ title: "Success", description: "Post bookmarked successfully" });
       queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
+        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/"; }, 500);
         return;
       }
-      toast({
-        title: "Error",
-        description: "Failed to bookmark post",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to bookmark post (try unbookmarking first if already saved)", variant: "destructive" });
     },
   });
 
   const handleVote = (type: 'upvote' | 'downvote') => {
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to vote on posts",
-        variant: "destructive",
-      });
+      toast({ title: "Login Required", description: "Please log in to vote on posts", variant: "destructive" });
       return;
     }
 
-    // FIX: Only trigger the mutation; the success handler updates the UI state.
-    // The previous implementation had a logic flaw in local state updates that could conflict with the server.
+    // Trigger mutation to fix the broken like button issue
     voteMutation.mutate({ type });
   };
 
   const handleBookmark = () => {
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to bookmark posts",
-        variant: "destructive",
-      });
+      toast({ title: "Login Required", description: "Please log in to bookmark posts", variant: "destructive" });
       return;
     }
 
@@ -172,23 +136,18 @@ export default function PostCard({ post }: PostCardProps) {
         await navigator.share({
           title: post.title || "Check out this post on Kgotla",
           text: post.content,
-          url: window.location.href,
+          url: `${window.location.origin}/post/${post.id}`,
         });
       } catch (error) {
         console.log("Share canceled");
       }
     } else {
-      // Fallback for browsers that don't support native sharing
-      navigator.clipboard.writeText(window.location.href);
-      toast({
-        title: "Link Copied",
-        description: "Post link copied to clipboard",
-      });
+      navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`);
+      toast({ title: "Link Copied", description: "Post link copied to clipboard" });
     }
   };
 
   const handleImageError = () => {
-    console.log('Image failed to load:', post.imageUrl);
     setImageError(true);
   };
 
@@ -206,7 +165,6 @@ export default function PostCard({ post }: PostCardProps) {
   };
   
   const getVerificationBadge = () => {
-    // Handle anonymous posts
     if (post.isAnonymous) {
       return (
         <div className="flex items-start space-x-3">
@@ -230,7 +188,6 @@ export default function PostCard({ post }: PostCardProps) {
       );
     }
 
-    // Handle posts with actual authors
     const author = post.author;
     const name = author?.displayName || "Kgotla User";
     const avatarUrl = author?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=40`;
@@ -270,13 +227,11 @@ export default function PostCard({ post }: PostCardProps) {
     );
   };
 
-  // Improved image rendering with fallbacks
   const renderImage = () => {
     if (!post.imageUrl || post.imageUrl.trim() === '') {
       return null;
     }
 
-    // Test if the image URL is valid
     const isValidImageUrl = post.imageUrl && (
       post.imageUrl.startsWith('http') || 
       post.imageUrl.startsWith('/') ||
@@ -284,7 +239,6 @@ export default function PostCard({ post }: PostCardProps) {
     );
 
     if (!isValidImageUrl) {
-      console.log('Invalid image URL:', post.imageUrl);
       return null;
     }
 
@@ -296,7 +250,6 @@ export default function PostCard({ post }: PostCardProps) {
           className="w-full h-64 object-cover rounded-lg"
           onError={handleImageError}
           onLoad={() => {
-            console.log('Image loaded successfully:', post.imageUrl);
             setImageError(false);
           }}
         />
@@ -329,7 +282,6 @@ export default function PostCard({ post }: PostCardProps) {
             {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
             <p className="text-neutral leading-relaxed">{post.content}</p>
             
-            {/* Show image if available */}
             {hasImage && renderImage()}
             
             <div className="space-y-2">
@@ -367,7 +319,6 @@ export default function PostCard({ post }: PostCardProps) {
               <p className="text-neutral leading-relaxed">{post.content}</p>
             </div>
             
-            {/* Show image if available */}
             {hasImage && renderImage()}
           </div>
         );
@@ -375,7 +326,9 @@ export default function PostCard({ post }: PostCardProps) {
       case 'image':
         return (
           <div className="space-y-3">
+            {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
             <p className="text-neutral leading-relaxed">{post.content}</p>
+            
             {hasImage ? renderImage() : (
               <div className="w-full h-64 bg-gray-100 rounded-lg flex flex-col items-center justify-center">
                 <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
@@ -392,7 +345,6 @@ export default function PostCard({ post }: PostCardProps) {
             {post.title && <h4 className="font-semibold text-lg text-neutral">{post.title}</h4>}
             <p className="text-neutral leading-relaxed">{post.content}</p>
             
-            {/* Show image if available for any post type */}
             {hasImage && renderImage()}
           </div>
         )
@@ -429,19 +381,25 @@ export default function PostCard({ post }: PostCardProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => handleVote('upvote')}
+                disabled={voteMutation.isPending}
                 className={`flex items-center space-x-1 ${
-                  userVote === 'upvote' ? 'text-primary' : 'text-gray-500 hover:text-primary'
+                  userVote === 'upvote' 
+                    ? 'text-primary' 
+                    : 'text-gray-500 hover:text-primary'
                 }`}
               >
                 <ChevronUp size={18} />
-                <span className="text-sm">{post.upvotes}</span>
+                <span className="text-sm">{totalScore}</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => handleVote('downvote')}
+                disabled={voteMutation.isPending}
                 className={`flex items-center space-x-1 ${
-                  userVote === 'downvote' ? 'text-accent' : 'text-gray-500 hover:text-accent'
+                  userVote === 'downvote' 
+                    ? 'text-accent' 
+                    : 'text-gray-500 hover:text-accent'
                 }`}
               >
                 <ChevronDown size={18} />
