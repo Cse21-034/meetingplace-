@@ -3,8 +3,41 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupFirebaseAuth, verifyFirebaseToken } from "./firebaseAuth";
-import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema } from "@shared/schema";
+import { insertPostSchema, insertCommentSchema, insertVoteSchema, insertBookmarkSchema, type MarketplaceItem } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+
+// Utility function to enrich Marketplace Item data with Seller info
+async function enrichMarketplaceItem(item: MarketplaceItem): Promise<any> {
+  const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
+  
+  return {
+    ...item,
+    // Price from cents back to major currency unit
+    price: item.price / 100, 
+    images: item.images || [],
+    seller: seller ? {
+      id: seller.id,
+      name: seller.displayName || seller.firstName || 'Anonymous Seller',
+      // Robust avatar fallback logic
+      avatar: seller.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(seller.firstName || "User")}&size=40`,
+      // Mocked logic for rating/reviews using existing user data
+      rating: parseFloat((Math.min(5, 4.0 + (seller.reputation || 0) / 100)).toFixed(1)) || 4.5, 
+      reviews: (seller.totalPosts || 0) + (seller.totalComments || 0) + 10, // Mocked logic
+    } : {
+      id: 'anonymous',
+      name: 'Anonymous Seller',
+      avatar: 'https://ui-avatars.com/api/?name=Anonymous+Seller&size=40',
+      rating: 0,
+      reviews: 0
+    },
+    currency: item.currency || "USD",
+    isSponsored: item.featured || false,
+    views: item.views || 0,
+    likes: 0, 
+    createdAt: item.createdAt || new Date(),
+  };
+}
+
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint for monitoring and deployment platforms
@@ -744,32 +777,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Marketplace routes
+  // Marketplace routes - MODIFIED to fetch real data with seller info and filters
   app.get('/api/marketplace', async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
       const offset = parseInt(req.query.offset as string) || 0;
-      const items = await storage.getMarketplaceItems(limit, offset);
-      res.json(items);
+      const query = req.query.q as string;
+      const category = req.query.category as string;
+      
+      const rawItems = await storage.getMarketplaceItems(limit, offset, query, category);
+      
+      const itemsWithSellers = await Promise.all(rawItems.map(enrichMarketplaceItem));
+
+      res.json(itemsWithSellers);
     } catch (error) {
       console.error('Error fetching marketplace items:', error);
       res.status(500).json({ message: 'Failed to fetch marketplace items' });
     }
   });
 
+  // Marketplace create endpoint - MODIFIED to handle image payload and return enriched data
   app.post('/api/marketplace', verifyFirebaseToken, async (req: any, res) => {
     try {
       const userId = req.firebaseUser?.uid;
-      const item = await storage.createMarketplaceItem({
-        ...req.body,
-        sellerId: userId
-      });
-      res.json(item);
+      const { images, ...rest } = req.body;
+      
+      const itemData: any = {
+        ...rest,
+        sellerId: userId,
+        // Ensure images is saved as a JSON array of strings (base64 or URL)
+        images: Array.isArray(images) ? images : (images ? [images] : []), 
+        price: rest.price, // price is already converted to cents in the client/route logic
+      }
+
+      // Basic validation for images if the array is not empty
+      if (itemData.images.length > 0 && !itemData.images[0].startsWith('data:image/')) {
+        return res.status(400).json({ message: 'Invalid image data provided. Must be Base64.' });
+      }
+      
+      const item = await storage.createMarketplaceItem(itemData);
+      
+      // Return the enriched item to match the GET request format
+      const enrichedItem = await enrichMarketplaceItem(item);
+      
+      res.json(enrichedItem);
     } catch (error) {
       console.error('Error creating marketplace item:', error);
       res.status(500).json({ message: 'Failed to create marketplace item' });
     }
   });
+
 
   // Transactions routes
   app.get('/api/transactions', verifyFirebaseToken, async (req: any, res) => {
