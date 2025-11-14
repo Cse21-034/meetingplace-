@@ -42,14 +42,13 @@ interface Post {
   currentUserVote?: 'upvote' | 'downvote' | null; 
 }
 
-// Interface for Sponsored Content (relies on /api/sponsored-content route in server/routes.ts)
-interface SponsoredContent {
-  id: number;
-  title: string;
-  content: string;
-  imageUrl: string;
-  linkUrl: string;
-}
+// Static mock for Sponsored Content to restore its original look and click function
+const MOCK_SPONSORED_CONTENT = {
+  imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=60&h=60&fit=crop&crop=center",
+  title: 'Support Local Artisans',
+  content: 'Discover authentic handmade crafts from Southern Africa. Shop now and support our community.',
+  linkUrl: 'https://kgotla.com/sponsored/local-artisans' // Placeholder link
+};
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -71,17 +70,11 @@ export default function Home() {
     return <div>Please sign in to continue</div>;
   }
 
-  // Fetch real posts data (server/routes.ts is configured to enrich this with author data)
+  // Fetch real posts data
   const { data: posts, isLoading: postsLoading, error } = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     enabled: !!user,
     retry: false,
-  });
-  
-  // Fetch sponsored content
-  const { data: sponsoredItems = [] } = useQuery<SponsoredContent[]>({
-    queryKey: ["/api/sponsored-content"],
-    enabled: !!user,
   });
 
   useEffect(() => {
@@ -109,6 +102,10 @@ export default function Home() {
     setLocation("/search");
   }
 
+  const handleSponsoredClick = (url: string) => {
+    window.open(url, '_blank');
+  };
+
   const header = (
     <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center space-x-3">
@@ -130,7 +127,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleSearchClick} // FIXED: Navigate to search page
+          onClick={handleSearchClick} 
           className="text-gray-600 hover:text-primary"
         >
           <Search size={16} />
@@ -138,7 +135,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setLocation("/notifications")} // FIXED: Navigate to notifications page
+          onClick={() => setLocation("/notifications")} 
           className="text-gray-600 hover:text-primary relative"
         >
           <Bell size={16} />
@@ -205,7 +202,7 @@ export default function Home() {
     </section>
   ) : null;
 
-  // FIXED: Premium upgrade banner now correctly checks user subscriptionTier
+  // RESTORED MOCK PREMIUM BANNER with working click handler
   const premiumBanner = user?.subscriptionTier === 'free' ? (
     <section className="px-4 py-3">
       <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20">
@@ -238,8 +235,8 @@ export default function Home() {
     </section>
   ) : null;
 
-  // REMOVED MOCK SPONSORED CONTENT: Using real data fetch
-  const sponsoredContent = sponsoredItems.length > 0 ? (
+  // RESTORED MOCK SPONSORED CONTENT with working click handler
+  const sponsoredContent = (
     <section className="px-4 py-3">
       <Card className="border-yellow-200 bg-yellow-50">
         <CardContent className="p-4">
@@ -250,27 +247,33 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-3">
             <img 
-              src={sponsoredItems[0].imageUrl || "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=60&h=60&fit=crop&crop=center"}
-              alt={sponsoredItems[0].title}
+              src={MOCK_SPONSORED_CONTENT.imageUrl}
+              alt={MOCK_SPONSORED_CONTENT.title}
               className="w-12 h-12 rounded-lg object-cover"
             />
             <div className="flex-1">
               <h3 className="font-medium text-gray-900 line-clamp-1">
-                {sponsoredItems[0].title}
+                {language === 'en' ? MOCK_SPONSORED_CONTENT.title : 'Thusa Baithuti ba Selegae'}
               </h3>
               <p className="text-sm text-gray-600 line-clamp-2">
-                {sponsoredItems[0].content}
+                {language === 'en' 
+                  ? MOCK_SPONSORED_CONTENT.content
+                  : 'Bona ditiro tse di dirilweng ka matsogo go tswa Aforikaborwa. Reka gompieno o thuse setšhaba sa rona.'
+                }
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => window.open(sponsoredItems[0].linkUrl, '_blank')}>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)} // FIXED: Opens URL
+            >
               {language === 'en' ? 'Learn More' : 'Ithute go oketsi'}
             </Button>
           </div>
         </CardContent>
       </Card>
     </section>
-  ) : null;
-
+  );
 
   const content = (
     <div className="space-y-0">
@@ -281,7 +284,7 @@ export default function Home() {
         </div>
       ) : posts && posts.length > 0 ? (
         posts.map((post: Post) => (
-          <PostCard key={post.id} post={post} /> // Uses real posts data
+          <PostCard key={post.id} post={post} /> 
         ))
       ) : (
         <Card className="mx-4 mt-8">
@@ -329,7 +332,7 @@ export default function Home() {
         language={language}
       />
       <SubscriptionModal 
-        trigger={null} // Modal triggered by button inside the component
+        trigger={null} 
         isOpen={isSubscriptionModalOpen}
         onClose={() => setIsSubscriptionModalOpen(false)}
       />
