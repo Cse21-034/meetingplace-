@@ -6,10 +6,8 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import MobileLayout from "@/components/mobile-layout";
 import PostCard from "@/components/post-card";
 import CreatePostModal from "@/components/create-post-modal";
-import TipModal from "@/components/tip-modal";
-import SubscriptionModal from "@/components/subscription-modal";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Bell, Globe, Crown, DollarSign, Star } from "lucide-react";
+import { Plus, Search, Bell, Globe, Crown, Star } from "lucide-react";
 import AppMenu from "@/components/app-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +43,18 @@ export default function Home() {
   const { toast } = useToast();
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [language, setLanguage] = useState<'en' | 'tn'>('en');
+
+  // Utility to get the most robust avatar URL for the logged-in user
+  const getRobustAvatarUrl = () => {
+    // 1. Use the fetched profileImageUrl (from DB sync) first
+    if (user?.profileImageUrl) {
+      return user.profileImageUrl;
+    }
+    
+    // 2. Fallback to a name-based avatar using the most complete name available
+    const nameForAvatar = user?.displayName || user?.firstName || user?.email?.split('@')[0] || "User";
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForAvatar)}&size=80`;
+  };
 
   // Show landing page if not authenticated
   if (!loading && !user) {
@@ -122,7 +132,7 @@ export default function Home() {
           <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-full p-0.5">
             <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
               <img 
-                src={user.profileImageUrl || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.firstName || "User")}
+                src={getRobustAvatarUrl()}
                 alt="Your story" 
                 className="w-14 h-14 rounded-full object-cover"
               />
@@ -153,7 +163,7 @@ export default function Home() {
     <section className="px-4 py-3 bg-white border-b border-gray-200">
       <div className="flex items-center space-x-3">
         <img 
-          src={user.profileImageUrl || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.firstName || "User")}
+          src={getRobustAvatarUrl()}
           alt="Your profile" 
           className="w-10 h-10 rounded-full object-cover"
         />
@@ -189,14 +199,10 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            <SubscriptionModal 
-              trigger={
-                <Button size="sm" className="flex items-center gap-2">
-                  <Star className="w-4 h-4" />
-                  {language === 'en' ? 'Upgrade' : 'Tokafatsa'}
-                </Button>
-              }
-            />
+            <Button size="sm" className="flex items-center gap-2">
+              <Star className="w-4 h-4" />
+              {language === 'en' ? 'Upgrade' : 'Tokafatsa'}
+            </Button>
           </div>
         </CardContent>
       </Card>
