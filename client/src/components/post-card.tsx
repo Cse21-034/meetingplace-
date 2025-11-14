@@ -45,6 +45,8 @@ interface PostCardProps {
     downvotes: number;
     commentCount: number;
     createdAt: string;
+    // NOTE: This field must be enriched by the API to function correctly on load
+    currentUserVote?: 'upvote' | 'downvote' | null; 
     author: PostAuthor | null;
   };
 }
@@ -54,7 +56,9 @@ export default function PostCard({ post }: PostCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCommentSheetOpen, setIsCommentSheetOpen] = useState(false);
-  const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(null);
+  
+  // FIX: Initialize userVote state from the prop (provided by the API)
+  const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(post.currentUserVote || null);
   const [imageError, setImageError] = useState(false);
 
   // DEBUG: Log post data to see what's happening
@@ -63,16 +67,24 @@ export default function PostCard({ post }: PostCardProps) {
     type: post.type,
     imageUrl: post.imageUrl,
     hasImage: post.imageUrl && post.imageUrl.trim() !== '',
-    content: post.content.substring(0, 50) + '...'
+    content: post.content.substring(0, 50) + '...',
+    currentUserVote: post.currentUserVote 
   });
 
   const voteMutation = useMutation({
     mutationFn: async ({ type }: { type: 'upvote' | 'downvote' }) => {
+      // The server logic handles the complex business logic (add, remove, swap)
       await apiRequest("POST", "/api/votes", { postId: post.id, type });
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      // FIX: Optimistically update local state for fast UI response
+      const newVote = userVote === variables.type ? null : variables.type;
+      setUserVote(newVote); 
+      
+      // FIX: Invalidate to trigger a fresh fetch and update all vote counts
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts-with-authors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts", post.id] });
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
@@ -86,9 +98,10 @@ export default function PostCard({ post }: PostCardProps) {
         }, 500);
         return;
       }
+      // FIX: Improved error message reporting the underlying issue
       toast({
         title: "Error",
-        description: "Failed to vote on post",
+        description: `Failed to vote on post. ${error instanceof Error ? error.message : ''}`,
         variant: "destructive",
       });
     },
@@ -103,6 +116,7 @@ export default function PostCard({ post }: PostCardProps) {
         title: "Success",
         description: "Post bookmarked successfully",
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookmarks"] });
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
@@ -134,7 +148,8 @@ export default function PostCard({ post }: PostCardProps) {
       return;
     }
 
-    setUserVote(prevVote => prevVote === type ? null : type);
+    // FIX: Only trigger the mutation; the success handler updates the UI state.
+    // The previous implementation had a logic flaw in local state updates that could conflict with the server.
     voteMutation.mutate({ type });
   };
 
