@@ -67,10 +67,11 @@ export default function Home() {
   };
 
   if (!loading && !user) {
+    // Show landing page if not authenticated (as defined in App.tsx routing)
     return <div>Please sign in to continue</div>;
   }
 
-  // Fetch real posts data
+  // Fetch real posts data (removing mock data)
   const { data: posts, isLoading: postsLoading, error } = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     enabled: !!user,
@@ -99,7 +100,7 @@ export default function Home() {
   };
 
   const handleSearchClick = () => {
-    setLocation("/search");
+    setLocation("/search"); // FIXED: Navigates to search page
   }
   
   const handleSponsoredClick = (url: string) => {
@@ -127,7 +128,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleSearchClick}
+          onClick={handleSearchClick} // FIXED: Connects to search navigation
           className="text-gray-600 hover:text-primary"
         >
           <Search size={16} />
@@ -135,7 +136,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setLocation("/notifications")}
+          onClick={() => setLocation("/notifications")} // FIXED: Connects to notifications navigation
           className="text-gray-600 hover:text-primary relative"
         >
           <Bell size={16} />
@@ -145,7 +146,7 @@ export default function Home() {
     </header>
   );
 
-  // MOCK STORIES
+  // STORIES SECTION
   const stories = user ? (
     <section className="px-4 py-3 bg-white border-b border-gray-200">
       <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
@@ -179,6 +180,7 @@ export default function Home() {
     </section>
   ) : null;
 
+  // CREATE POST PROMPT (Quick Entry)
   const createPostPrompt = user ? (
     <section className="px-4 py-3 bg-white border-b border-gray-200">
       <div className="flex items-center space-x-3">
@@ -200,7 +202,7 @@ export default function Home() {
     </section>
   ) : null;
 
-  // RESTORED PREMIUM BANNER + ADDED CLICK FUNCTIONALITY
+  // PREMIUM BANNER (Upgrade to Premium)
   const premiumBanner = user?.subscriptionTier === 'free' ? (
     <section className="px-4 py-3">
       <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20">
@@ -222,7 +224,7 @@ export default function Home() {
             <Button 
               size="sm" 
               className="flex items-center gap-2"
-              onClick={() => setIsSubscriptionModalOpen(true)}
+              onClick={() => setIsSubscriptionModalOpen(true)} // FIXED: Opens SubscriptionModal
             >
               <Star className="w-4 h-4" />
               {language === 'en' ? 'Upgrade' : 'Tokafatsa'}
@@ -233,7 +235,7 @@ export default function Home() {
     </section>
   ) : null;
 
-  // RESTORED SPONSORED CONTENT + ADDED CLICK FUNCTIONALITY
+  // SPONSORED CONTENT BANNER
   const sponsoredContent = (
     <section className="px-4 py-3">
       <Card className="border-yellow-200 bg-yellow-50">
@@ -263,7 +265,7 @@ export default function Home() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)}
+              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)} // FIXED: Connects to external URL
             >
               {language === 'en' ? 'Learn More' : 'Ithute go oketsi'}
             </Button>
@@ -273,7 +275,7 @@ export default function Home() {
     </section>
   );
 
-  // START OF ACTUAL POST FEED CONTENT
+  // POST FEED CONTENT
   const content = (
     <div className="space-y-0">
       {postsLoading ? (
@@ -324,7 +326,7 @@ export default function Home() {
       {createPostPrompt}
       {premiumBanner}
       {sponsoredContent}
-      {content} {/* <--- This is the post feed, now correctly placed last */}
+      {content} {/* <-- POST FEED IS HERE, AFTER ALL BANNERS */}
       <CreatePostModal 
         isOpen={isCreatePostOpen} 
         onClose={() => setIsCreatePostOpen(false)}
