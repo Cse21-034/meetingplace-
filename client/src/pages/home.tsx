@@ -42,12 +42,12 @@ interface Post {
   currentUserVote?: 'upvote' | 'downvote' | null; 
 }
 
-// Static mock for Sponsored Content to restore its original look and click function
+// Static mock for Sponsored Content to restore its original look
 const MOCK_SPONSORED_CONTENT = {
   imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=60&h=60&fit=crop&crop=center",
   title: 'Support Local Artisans',
   content: 'Discover authentic handmade crafts from Southern Africa. Shop now and support our community.',
-  linkUrl: 'https://kgotla.com/sponsored/local-artisans' // Placeholder link
+  linkUrl: 'https://kgotla.com/sponsored/local-artisans' 
 };
 
 export default function Home() {
@@ -70,7 +70,7 @@ export default function Home() {
     return <div>Please sign in to continue</div>;
   }
 
-  // Fetch real posts data
+  // Fetch real posts data (using real API endpoint, removing mock data)
   const { data: posts, isLoading: postsLoading, error } = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     enabled: !!user,
@@ -99,9 +99,9 @@ export default function Home() {
   };
 
   const handleSearchClick = () => {
-    setLocation("/search");
+    setLocation("/search"); // FIXED: Navigates to search page
   }
-
+  
   const handleSponsoredClick = (url: string) => {
     window.open(url, '_blank');
   };
@@ -127,7 +127,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleSearchClick} 
+          onClick={handleSearchClick} // FIXED: Connects to search navigation
           className="text-gray-600 hover:text-primary"
         >
           <Search size={16} />
@@ -135,7 +135,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setLocation("/notifications")} 
+          onClick={() => setLocation("/notifications")} // FIXED: Connects to notifications navigation
           className="text-gray-600 hover:text-primary relative"
         >
           <Bell size={16} />
@@ -145,11 +145,10 @@ export default function Home() {
     </header>
   );
 
-  // MOCK STORIES REPLACED WITH STATIC PLACEHOLDERS
+  // MOCK STORIES KEPT AS PLACEHOLDERS
   const stories = user ? (
     <section className="px-4 py-3 bg-white border-b border-gray-200">
       <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
-        {/* User Story */}
         <div className="flex-shrink-0 text-center">
           <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-full p-0.5">
             <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
@@ -164,7 +163,6 @@ export default function Home() {
             {language === 'en' ? 'Your Story' : 'Pale ya gago'}
           </p>
         </div>
-        {/* Community Story Placeholder */}
         <div className="flex-shrink-0 text-center">
           <div className="w-16 h-16 bg-gradient-to-br from-secondary to-cultural rounded-full p-0.5">
             <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
@@ -202,7 +200,7 @@ export default function Home() {
     </section>
   ) : null;
 
-  // RESTORED MOCK PREMIUM BANNER with working click handler
+  // RESTORED PREMIUM BANNER + ADDED CLICK FUNCTIONALITY
   const premiumBanner = user?.subscriptionTier === 'free' ? (
     <section className="px-4 py-3">
       <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20">
@@ -224,7 +222,7 @@ export default function Home() {
             <Button 
               size="sm" 
               className="flex items-center gap-2"
-              onClick={() => setIsSubscriptionModalOpen(true)} // FIXED: Opens the SubscriptionModal
+              onClick={() => setIsSubscriptionModalOpen(true)} // FIXED: Opens SubscriptionModal
             >
               <Star className="w-4 h-4" />
               {language === 'en' ? 'Upgrade' : 'Tokafatsa'}
@@ -235,7 +233,7 @@ export default function Home() {
     </section>
   ) : null;
 
-  // RESTORED MOCK SPONSORED CONTENT with working click handler
+  // RESTORED SPONSORED CONTENT + ADDED CLICK FUNCTIONALITY
   const sponsoredContent = (
     <section className="px-4 py-3">
       <Card className="border-yellow-200 bg-yellow-50">
@@ -252,7 +250,7 @@ export default function Home() {
               className="w-12 h-12 rounded-lg object-cover"
             />
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900 line-clamp-1">
+              <h3 className="font-medium text-gray-900">
                 {language === 'en' ? MOCK_SPONSORED_CONTENT.title : 'Thusa Baithuti ba Selegae'}
               </h3>
               <p className="text-sm text-gray-600 line-clamp-2">
@@ -265,7 +263,7 @@ export default function Home() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)} // FIXED: Opens URL
+              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)} // FIXED: Connects to external URL
             >
               {language === 'en' ? 'Learn More' : 'Ithute go oketsi'}
             </Button>
