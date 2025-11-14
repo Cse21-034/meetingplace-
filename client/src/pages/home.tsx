@@ -54,14 +54,16 @@ export default function Home() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false); 
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false); // State for Upgrade Modal
   const [language, setLanguage] = useState<'en' | 'tn'>('en');
   const [, setLocation] = useLocation(); 
 
   const getRobustAvatarUrl = () => {
+    // 1. Use Firebase User's photoURL (which is updated from DB sync in use-auth)
     if (user?.photoURL) {
         return user.photoURL;
     }
+    // 2. Fallback to name-based avatar
     const nameForAvatar = user?.displayName || user?.email?.split('@')[0] || "User";
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForAvatar)}&size=80`;
   };
@@ -251,11 +253,11 @@ export default function Home() {
             />
             <div className="flex-1">
               <h3 className="font-medium text-gray-900">
-                {language === 'en' ? MOCK_SPONSORED_CONTENT.title : 'Thusa Baithuti ba Selegae'}
+                {language === 'en' ? 'Support Local Artisans' : 'Thusa Baithuti ba Selegae'}
               </h3>
               <p className="text-sm text-gray-600 line-clamp-2">
                 {language === 'en' 
-                  ? MOCK_SPONSORED_CONTENT.content
+                  ? 'Discover authentic handmade crafts from Southern Africa. Shop now and support our community.'
                   : 'Bona ditiro tse di dirilweng ka matsogo go tswa Aforikaborwa. Reka gompieno o thuse setšhaba sa rona.'
                 }
               </p>
@@ -282,7 +284,7 @@ export default function Home() {
         </div>
       ) : posts && posts.length > 0 ? (
         posts.map((post: Post) => (
-          <PostCard key={post.id} post={post} /> 
+          <PostCard key={post.id} post={post} /> // Uses real posts data
         ))
       ) : (
         <Card className="mx-4 mt-8">
