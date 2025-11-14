@@ -1,5 +1,6 @@
+// client/src/pages/notifications.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
@@ -7,15 +8,36 @@ import MobileLayout from "@/components/mobile-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Heart, MessageCircle, UserPlus, Settings, CheckCheck } from "lucide-react";
+import { Bell, Heart, MessageCircle, UserPlus, Settings, CheckCheck, Gift, Crown } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
+// Interface based on shared/schema.ts
+interface NotificationData {
+  id: number;
+  userId: string;
+  type: 'comment' | 'vote' | 'mention' | 'follow' | 'tip' | 'subscription';
+  title: string;
+  content: string;
+  relatedPostId?: number;
+  relatedCommentId?: number;
+  relatedUserId?: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 export default function Notifications() {
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: notifications, isLoading, error } = useQuery({
+  const isAuthenticated = !!user;
+
+  // FETCH REAL DATA
+  const { 
+    data: notifications, 
+    isLoading, 
+    error 
+  } = useQuery<NotificationData[]>({
     queryKey: ["/api/notifications"],
     enabled: isAuthenticated,
     retry: false,
@@ -30,35 +52,38 @@ export default function Notifications() {
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
+        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/"; }, 500);
         return;
       }
-      toast({
-        title: "Error",
-        description: "Failed to mark notification as read",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to mark notification as read", variant: "destructive" });
     },
   });
+  
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
+        const unreadIds = notifications?.filter(n => !n.isRead).map(n => n.id) || [];
+        // Sequential mutation of all unread items
+        await Promise.all(unreadIds.map(id => apiRequest("PUT", `/api/notifications/${id}/read`)));
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+        toast({ title: "Success", description: "All notifications marked as read." });
+    },
+    onError: () => {
+        toast({ title: "Error", description: "Failed to mark all notifications as read", variant: "destructive" });
+    }
+  });
+
 
   if (error && isUnauthorizedError(error as Error)) {
-    toast({
-      title: "Unauthorized",
-      description: "You are logged out. Logging in again...",
-      variant: "destructive",
-    });
-    setTimeout(() => {
-      window.location.href = "/api/login";
-    }, 500);
-    return null;
+    // Redirect logic handled by useAuth or the error handler, returning null to prevent render crash
+    return null; 
   }
+  
+  const finalNotifications = notifications || [];
+
+  const unreadCount = finalNotifications.filter(n => !n.isRead).length;
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -68,53 +93,16 @@ export default function Notifications() {
         return <MessageCircle className="text-blue-500" size={20} />;
       case 'follow':
         return <UserPlus className="text-green-500" size={20} />;
+      case 'tip':
+        return <Gift className="text-purple-500" size={20} />;
+      case 'subscription':
+        return <Crown className="text-yellow-500" size={20} />;
       case 'mention':
         return <Bell className="text-purple-500" size={20} />;
       default:
         return <Bell className="text-gray-500" size={20} />;
     }
   };
-
-  const mockNotifications = [
-    {
-      id: 1,
-      type: 'vote',
-      title: 'New upvote on your post',
-      content: 'Mmoloki Serame upvoted your post about traditional weather wisdom',
-      isRead: false,
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-      relatedUserId: 'user123',
-    },
-    {
-      id: 2,
-      type: 'comment',
-      title: 'New comment on your post',
-      content: 'Kefilwe Mogale commented on your graduation post',
-      isRead: false,
-      createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
-      relatedUserId: 'user456',
-    },
-    {
-      id: 3,
-      type: 'follow',
-      title: 'New follower',
-      content: 'Tebogo Morake started following you',
-      isRead: true,
-      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-      relatedUserId: 'user789',
-    },
-    {
-      id: 4,
-      type: 'mention',
-      title: 'You were mentioned',
-      content: 'Naledi Kgomo mentioned you in a comment about tourism business',
-      isRead: true,
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-      relatedUserId: 'user101',
-    },
-  ];
-
-  const unreadCount = mockNotifications.filter(n => !n.isRead).length;
 
   const header = (
     <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
@@ -128,7 +116,12 @@ export default function Notifications() {
           )}
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="sm">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => markAllAsReadMutation.mutate()} // FIXED: Call mark all as read mutation
+            disabled={unreadCount === 0 || markAllAsReadMutation.isPending}
+          >
             <CheckCheck size={16} />
             Mark All Read
           </Button>
@@ -147,9 +140,9 @@ export default function Notifications() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
           <p className="text-gray-500 mt-2">Loading notifications...</p>
         </div>
-      ) : mockNotifications.length > 0 ? (
+      ) : finalNotifications.length > 0 ? ( // FIXED: Using real data
         <div className="divide-y divide-gray-200">
-          {mockNotifications.map((notification) => (
+          {finalNotifications.map((notification) => (
             <div
               key={notification.id}
               className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
@@ -173,7 +166,7 @@ export default function Notifications() {
                       {notification.title}
                     </h3>
                     <span className="text-xs text-gray-500">
-                      {formatDistanceToNow(notification.createdAt, { addSuffix: true })}
+                      {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mt-1">
