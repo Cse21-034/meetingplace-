@@ -17,15 +17,14 @@ import {
   ShoppingBag, 
   Plus, 
   Search, 
-  Filter, 
   Heart, 
   Star, 
   MapPin, 
-  Calendar,
-  DollarSign,
   Eye,
   MessageCircle,
-  Share2
+  Share2,
+  X,
+  Upload
 } from "lucide-react";
 
 const categories = [
@@ -41,79 +40,38 @@ const categories = [
   "Other"
 ];
 
-const mockMarketplaceItems = [
-  {
-    id: 1,
-    title: "Handwoven Baskets Set",
-    description: "Beautiful traditional baskets made from local materials. Perfect for home decoration or storage.",
-    price: 45.00,
-    currency: "USD",
-    images: ["https://images.unsplash.com/photo-1586075010923-2dd4570fb338?w=400"],
-    category: "Traditional Crafts",
-    location: "Gaborone, Botswana",
-    seller: {
-      id: "seller1",
-      name: "Mma Kgosi",
-      avatar: "https://ui-avatars.com/api/?name=Mma+Kgosi&size=40",
-      rating: 4.8,
-      reviews: 23
-    },
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    views: 145,
-    likes: 12,
-    isSponsored: false
-  },
-  {
-    id: 2,
-    title: "Organic Morogo Seeds",
-    description: "Premium organic seeds for traditional African spinach. Grow your own nutritious vegetables.",
-    price: 15.00,
-    currency: "USD",
-    images: ["https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400"],
-    category: "Food & Beverages",
-    location: "Maun, Botswana",
-    seller: {
-      id: "seller2",
-      name: "Rra Modise",
-      avatar: "https://ui-avatars.com/api/?name=Rra+Modise&size=40",
-      rating: 4.9,
-      reviews: 41
-    },
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    views: 89,
-    likes: 8,
-    isSponsored: true
-  },
-  {
-    id: 3,
-    title: "Traditional Seshweshwe Fabric",
-    description: "Authentic South African printed fabric. Various colors and patterns available.",
-    price: 28.00,
-    currency: "USD",
-    images: ["https://images.unsplash.com/photo-1558618666-fbd8c2cd8bd8?w=400"],
-    category: "Clothing & Accessories",
-    location: "Francistown, Botswana",
-    seller: {
-      id: "seller3",
-      name: "Mma Tlholo",
-      avatar: "https://ui-avatars.com/api/?name=Mma+Tlholo&size=40",
-      rating: 4.6,
-      reviews: 17
-    },
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    views: 203,
-    likes: 15,
-    isSponsored: false
-  }
-];
+// Interface to match the expected ENRICHED data structure from the API
+interface MarketplaceItem {
+  id: number;
+  title: string;
+  description: string;
+  price: number;
+  currency: string;
+  images: string[];
+  category: string;
+  location: string;
+  seller: {
+    id: string;
+    name: string;
+    avatar: string;
+    rating: number;
+    reviews: number;
+  };
+  views: number;
+  likes: number;
+  isSponsored: boolean;
+  createdAt: string;
+}
 
 export default function Marketplace() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null); 
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({
     title: "",
     description: "",
@@ -121,30 +79,70 @@ export default function Marketplace() {
     currency: "USD",
     category: "Other",
     location: "",
-    images: []
   });
 
-  // Mock query for marketplace items
-  const { data: marketplaceItems = mockMarketplaceItems } = useQuery({
+  // NEW: Fetch real data from the API
+  const { 
+    data: filteredItems = [], 
+    isLoading: isMarketplaceLoading 
+  } = useQuery<MarketplaceItem[]>({
     queryKey: ["/api/marketplace", selectedCategory, searchQuery],
-    queryFn: async () => {
-      // Filter mock data based on category and search
-      let filtered = mockMarketplaceItems;
+    queryFn: async ({ queryKey }) => {
+      const [path, category, query] = queryKey as [string, string, string];
       
-      if (selectedCategory !== "All") {
-        filtered = filtered.filter(item => item.category === selectedCategory);
+      const params = new URLSearchParams();
+      if (category && category !== "All") {
+        params.append("category", category);
+      }
+      if (query) {
+        params.append("q", query);
       }
       
-      if (searchQuery) {
-        filtered = filtered.filter(item => 
-          item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.description.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-      
-      return filtered;
+      // The server will enrich the raw item data with seller details.
+      const response = await apiRequest("GET", `/api/marketplace?${params.toString()}`);
+      return response.json();
     }
   });
+
+  // NEW: Image select handler
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Invalid file',
+          description: 'Please select an image file',
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // 5MB max limit check
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: 'File too large',
+          description: 'Please select an image smaller than 5MB',
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    // Reset file input
+    const fileInput = document.getElementById('image') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
 
   const createMarketplaceItem = useMutation({
     mutationFn: async (itemData: any) => 
@@ -155,6 +153,7 @@ export default function Marketplace() {
         description: "Your item has been added to the marketplace"
       });
       setIsCreateModalOpen(false);
+      // Reset form on success
       setNewItem({
         title: "",
         description: "",
@@ -162,8 +161,9 @@ export default function Marketplace() {
         currency: "USD",
         category: "Other",
         location: "",
-        images: []
       });
+      setImageFile(null);
+      setImagePreview(null);
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
     },
     onError: (error: any) => {
@@ -186,7 +186,8 @@ export default function Marketplace() {
     },
   });
 
-  const handleCreateItem = () => {
+  // MODIFIED: handleCreateItem to include image processing
+  const handleCreateItem = async () => {
     if (!newItem.title || !newItem.description || !newItem.price) {
       toast({
         title: "Missing Information",
@@ -196,13 +197,33 @@ export default function Marketplace() {
       return;
     }
 
-    createMarketplaceItem.mutate({
+    let payload: any = {
       ...newItem,
       price: Math.round(parseFloat(newItem.price) * 100) // Convert to cents
-    });
-  };
+    };
 
-  const filteredItems = marketplaceItems || [];
+    if (imageFile) {
+      try {
+        const base64Image = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(imageFile);
+        });
+        // Pass the base64 string as the single item in the images array
+        payload.images = [base64Image]; 
+      } catch (e) {
+        toast({
+          title: "Image Error",
+          description: "Failed to process image file.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    createMarketplaceItem.mutate(payload);
+  };
 
   const header = (
     <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
@@ -221,6 +242,49 @@ export default function Marketplace() {
                 <DialogTitle>List an Item</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
+                {/* NEW IMAGE FIELD */}
+                <div>
+                  <Label htmlFor="image">Image (First image is primary)</Label>
+                  {!imagePreview ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center mt-1">
+                      <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">Choose an image file (max 5MB)</p>
+                      <Input
+                        id="image"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => document.getElementById('image')?.click()}
+                      >
+                        Upload Image
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="relative mt-1">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-32 object-cover rounded-lg"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={removeImage}
+                        className="absolute top-2 right-2 flex items-center gap-1"
+                      >
+                        <X size={12} />
+                        Remove
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {/* END NEW IMAGE FIELD */}
+
                 <div>
                   <Label htmlFor="title">Title</Label>
                   <Input
@@ -327,7 +391,12 @@ export default function Marketplace() {
 
   const content = (
     <div className="space-y-4">
-      {filteredItems.length === 0 ? (
+      {isMarketplaceLoading ? (
+        <div className="py-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="text-gray-500 mt-2">Loading marketplace items...</p>
+        </div>
+      ) : filteredItems.length === 0 ? (
         <Card className="mx-4">
           <CardContent className="p-8 text-center">
             <ShoppingBag className="mx-auto mb-4 text-gray-400" size={48} />
@@ -344,7 +413,7 @@ export default function Marketplace() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 px-4">
-          {filteredItems.map((item) => (
+          {filteredItems.map((item: MarketplaceItem) => (
             <Card key={item.id} className="overflow-hidden">
               {item.isSponsored && (
                 <Badge className="absolute top-2 right-2 bg-yellow-500 text-white z-10">
@@ -354,7 +423,7 @@ export default function Marketplace() {
               
               <div className="relative">
                 <img
-                  src={item.images[0] || "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400"}
+                  src={item.images?.[0] || "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400"}
                   alt={item.title}
                   className="w-full h-48 object-cover"
                 />
@@ -389,6 +458,7 @@ export default function Marketplace() {
                 </div>
                 
                 <div className="flex items-center justify-between">
+                  {item.seller && (
                   <div className="flex items-center gap-2">
                     <img
                       src={item.seller.avatar}
@@ -399,10 +469,11 @@ export default function Marketplace() {
                       <div className="text-sm font-medium">{item.seller.name}</div>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Star className="w-3 h-3 text-yellow-500" />
-                        {item.seller.rating} ({item.seller.reviews})
+                        {item.seller.rating.toFixed(1)} ({item.seller.reviews})
                       </div>
                     </div>
                   </div>
+                  )}
                   
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     <div className="flex items-center gap-1">
