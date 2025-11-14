@@ -70,7 +70,7 @@ export default function PostCard({ post }: PostCardProps) {
       await apiRequest("POST", "/api/votes", { postId: post.id, type });
     },
     onSuccess: (data, variables) => {
-      // FIXED: Optimistically update local state for faster UI response
+      // Optimistically update local state for faster UI response
       const newVote = userVote === variables.type ? null : variables.type;
       setUserVote(newVote); 
       
@@ -117,7 +117,6 @@ export default function PostCard({ post }: PostCardProps) {
       return;
     }
 
-    // Trigger mutation to fix the broken like button issue
     voteMutation.mutate({ type });
   };
 
