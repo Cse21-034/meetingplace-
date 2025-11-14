@@ -42,7 +42,7 @@ interface Post {
   currentUserVote?: 'upvote' | 'downvote' | null; 
 }
 
-// Static mock for Sponsored Content to restore its original look
+// Static mock data for sponsored content (restored as requested)
 const MOCK_SPONSORED_CONTENT = {
   imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=60&h=60&fit=crop&crop=center",
   title: 'Support Local Artisans',
@@ -54,16 +54,14 @@ export default function Home() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false); // State for Upgrade Modal
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [language, setLanguage] = useState<'en' | 'tn'>('en');
   const [, setLocation] = useLocation(); 
 
   const getRobustAvatarUrl = () => {
-    // 1. Use Firebase User's photoURL (which is updated from DB sync in use-auth)
     if (user?.photoURL) {
         return user.photoURL;
     }
-    // 2. Fallback to name-based avatar
     const nameForAvatar = user?.displayName || user?.email?.split('@')[0] || "User";
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForAvatar)}&size=80`;
   };
@@ -72,7 +70,7 @@ export default function Home() {
     return <div>Please sign in to continue</div>;
   }
 
-  // Fetch real posts data (using real API endpoint, removing mock data)
+  // Fetch real posts data
   const { data: posts, isLoading: postsLoading, error } = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     enabled: !!user,
@@ -101,7 +99,7 @@ export default function Home() {
   };
 
   const handleSearchClick = () => {
-    setLocation("/search"); // FIXED: Navigates to search page
+    setLocation("/search");
   }
   
   const handleSponsoredClick = (url: string) => {
@@ -129,7 +127,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleSearchClick} // FIXED: Connects to search navigation
+          onClick={handleSearchClick}
           className="text-gray-600 hover:text-primary"
         >
           <Search size={16} />
@@ -137,7 +135,7 @@ export default function Home() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setLocation("/notifications")} // FIXED: Connects to notifications navigation
+          onClick={() => setLocation("/notifications")}
           className="text-gray-600 hover:text-primary relative"
         >
           <Bell size={16} />
@@ -147,7 +145,7 @@ export default function Home() {
     </header>
   );
 
-  // MOCK STORIES KEPT AS PLACEHOLDERS
+  // MOCK STORIES
   const stories = user ? (
     <section className="px-4 py-3 bg-white border-b border-gray-200">
       <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
@@ -224,7 +222,7 @@ export default function Home() {
             <Button 
               size="sm" 
               className="flex items-center gap-2"
-              onClick={() => setIsSubscriptionModalOpen(true)} // FIXED: Opens SubscriptionModal
+              onClick={() => setIsSubscriptionModalOpen(true)}
             >
               <Star className="w-4 h-4" />
               {language === 'en' ? 'Upgrade' : 'Tokafatsa'}
@@ -253,11 +251,11 @@ export default function Home() {
             />
             <div className="flex-1">
               <h3 className="font-medium text-gray-900">
-                {language === 'en' ? 'Support Local Artisans' : 'Thusa Baithuti ba Selegae'}
+                {language === 'en' ? MOCK_SPONSORED_CONTENT.title : 'Thusa Baithuti ba Selegae'}
               </h3>
               <p className="text-sm text-gray-600 line-clamp-2">
                 {language === 'en' 
-                  ? 'Discover authentic handmade crafts from Southern Africa. Shop now and support our community.'
+                  ? MOCK_SPONSORED_CONTENT.content
                   : 'Bona ditiro tse di dirilweng ka matsogo go tswa Aforikaborwa. Reka gompieno o thuse setšhaba sa rona.'
                 }
               </p>
@@ -265,7 +263,7 @@ export default function Home() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)} // FIXED: Connects to external URL
+              onClick={() => handleSponsoredClick(MOCK_SPONSORED_CONTENT.linkUrl)}
             >
               {language === 'en' ? 'Learn More' : 'Ithute go oketsi'}
             </Button>
@@ -275,6 +273,7 @@ export default function Home() {
     </section>
   );
 
+  // START OF ACTUAL POST FEED CONTENT
   const content = (
     <div className="space-y-0">
       {postsLoading ? (
@@ -284,7 +283,7 @@ export default function Home() {
         </div>
       ) : posts && posts.length > 0 ? (
         posts.map((post: Post) => (
-          <PostCard key={post.id} post={post} /> // Uses real posts data
+          <PostCard key={post.id} post={post} /> // The actual posts
         ))
       ) : (
         <Card className="mx-4 mt-8">
@@ -325,7 +324,7 @@ export default function Home() {
       {createPostPrompt}
       {premiumBanner}
       {sponsoredContent}
-      {content}
+      {content} {/* <--- This is the post feed, now correctly placed last */}
       <CreatePostModal 
         isOpen={isCreatePostOpen} 
         onClose={() => setIsCreatePostOpen(false)}
