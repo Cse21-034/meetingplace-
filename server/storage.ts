@@ -108,7 +108,7 @@ export interface IStorage {
   updateTip(id: number, updates: Partial<Tip>): Promise<Tip>;
 
   // Marketplace operations
-  getMarketplaceItems(limit?: number, offset?: number): Promise<MarketplaceItem[]>;
+  getMarketplaceItems(limit?: number, offset?: number, query?: string, category?: string): Promise<MarketplaceItem[]>;
   getMarketplaceItemById(id: number): Promise<MarketplaceItem | undefined>;
   createMarketplaceItem(item: InsertMarketplaceItem): Promise<MarketplaceItem>;
   updateMarketplaceItem(id: number, updates: Partial<MarketplaceItem>): Promise<MarketplaceItem>;
@@ -583,12 +583,27 @@ async upsertUser(userData: UpsertUser): Promise<User> {
     return updatedTip;
   }
 
-  // Marketplace operations
-  async getMarketplaceItems(limit = 20, offset = 0): Promise<MarketplaceItem[]> {
+  // Marketplace operations - MODIFIED signature
+  async getMarketplaceItems(limit = 20, offset = 0, query?: string, category?: string): Promise<MarketplaceItem[]> {
+    const conditions = [eq(marketplaceItems.isActive, true)];
+
+    if (category && category !== 'All') {
+      conditions.push(eq(marketplaceItems.category, category));
+    }
+    
+    if (query) {
+      conditions.push(
+        or(
+          sql`${marketplaceItems.title} ILIKE ${`%${query}%`}`,
+          sql`${marketplaceItems.description} ILIKE ${`%${query}%`}`
+        )
+      );
+    }
+    
     return await db
       .select()
       .from(marketplaceItems)
-      .where(eq(marketplaceItems.isActive, true))
+      .where(and(...conditions))
       .orderBy(desc(marketplaceItems.featured), desc(marketplaceItems.createdAt))
       .limit(limit)
       .offset(offset);
