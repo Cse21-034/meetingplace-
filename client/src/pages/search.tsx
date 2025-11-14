@@ -1,3 +1,4 @@
+// client/src/pages/search.tsx
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import MobileLayout from "@/components/mobile-layout";
@@ -45,68 +46,38 @@ export default function Search() {
     </header>
   );
 
-  const trendingTopics = [
-    { tag: "#WeatherWisdom", posts: 24 },
-    { tag: "#BusinessAdvice", posts: 18 },
-    { tag: "#TraditionalKnowledge", posts: 32 },
-    { tag: "#Tourism", posts: 15 },
-    { tag: "#Education", posts: 28 },
-    { tag: "#Culture", posts: 41 },
-  ];
-
   const content = (
     <div className="space-y-4">
       {!searchQuery ? (
         <>
-          {/* Trending Topics */}
+          {/* REMOVED MOCK TRENDING TOPICS - Showing placeholder */}
           <section className="px-4 py-3">
             <h2 className="text-lg font-semibold text-neutral mb-3 flex items-center">
               <TrendingUp className="mr-2 text-primary" size={20} />
-              Trending Topics
+              Start Searching
             </h2>
-            <div className="space-y-2">
-              {trendingTopics.map((topic) => (
-                <div
-                  key={topic.tag}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
-                >
-                  <div>
-                    <p className="font-medium text-primary">{topic.tag}</p>
-                    <p className="text-sm text-gray-600">{topic.posts} posts</p>
-                  </div>
-                  <Button variant="ghost" size="sm">
-                    →
-                  </Button>
+            <Card className="text-center">
+              <CardContent className="p-6">
+                <p className="text-gray-600 mb-4">
+                  Enter keywords above to search across all posts, people, and community groups.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                    <Button variant="secondary" size="sm" className="pointer-events-none">#Culture</Button>
+                    <Button variant="secondary" size="sm" className="pointer-events-none">#Business</Button>
+                    <Button variant="secondary" size="sm" className="pointer-events-none">#Education</Button>
                 </div>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
           </section>
 
-          {/* Recent Searches */}
-          <section className="px-4 py-3">
-            <h2 className="text-lg font-semibold text-neutral mb-3">Recent Searches</h2>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <p className="text-gray-700">tourism business advice</p>
-                <Button variant="ghost" size="sm" className="text-gray-400">
-                  ×
-                </Button>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <p className="text-gray-700">traditional medicine</p>
-                <Button variant="ghost" size="sm" className="text-gray-400">
-                  ×
-                </Button>
-              </div>
-            </div>
-          </section>
+          {/* REMOVED MOCK Recent Searches */}
         </>
       ) : (
         <div className="px-4">
           {searchLoading ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-              <p className="text-gray-500 mt-2">Searching...</p>
+              <p className="text-gray-500 mt-2">Searching for "{searchQuery}"...</p>
             </div>
           ) : searchResults && searchResults.length > 0 ? (
             <div className="space-y-4">
@@ -125,7 +96,7 @@ export default function Search() {
                   No results found
                 </h3>
                 <p className="text-gray-600">
-                  Try adjusting your search terms or browse trending topics above.
+                  Try adjusting your search terms or browse suggested tags.
                 </p>
               </CardContent>
             </Card>
